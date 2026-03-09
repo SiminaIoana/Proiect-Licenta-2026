@@ -3,11 +3,9 @@
 
 `include "include.sv"
 `define vintf vif.driver_cb
-//`define vintf vif.driver_mp.driver_cb
 class driver extends uvm_driver#(transaction);
    `uvm_component_utils(driver)
 
-   //virtual fifo_intf vif;
    virtual fifo_intf.driver_mp vif;
    function new(string name="driver",uvm_component parent=null);
       super.new(name,parent);
