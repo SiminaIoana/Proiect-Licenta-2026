@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.groq import Groq
+
 # load environment variables
 load_dotenv()
 
