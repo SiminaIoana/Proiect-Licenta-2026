@@ -3,3 +3,7 @@ SIM-FIFO/
 DOCS/
 *.txt
 *.csv
+*.log
+*.pb
+xsim.dir/
+*.jou
