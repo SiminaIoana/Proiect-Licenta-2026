@@ -10,13 +10,13 @@ if exist coverage_report_text rmdir /s /q coverage_report_text
 
 :: compile
 call xvlog -sv -L uvm "..\RTL-FIFO\dut.sv" "..\TB-FIFO\top.sv" -i "..\TB-FIFO"
-
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 :: xelab for data base
 call xelab top -L uvm -timescale 1ns/1ps -s top_sim -cov_db_name my_cov_db -cov_db_dir ./coverage_db
-
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 ::  run 
 call xsim top_sim -R
-
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 :: rfunctional coverage report
 call xcrg -dir ./coverage_db -db_name my_cov_db -report_format text -report_dir ./coverage_report_text
 

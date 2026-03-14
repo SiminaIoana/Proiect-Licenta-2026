@@ -1,49 +1,64 @@
 `ifndef FIFO_COVERAGE_CONTAINER_UVM
 `define FIFO_COVERAGE_CONTAINER_UVM
 
+`include "include.sv"
 class coverage_container extends uvm_subscriber#(transaction);
-   `uvm_component_utils(coverage_container)
+`uvm_component_utils(coverage_container)
 
-   transaction trans;
+uvm_tlm_analysis_fifo#(transaction) mon2subs;
+transaction trans;
+
+function new(string name="coverage_container",uvm_component parent=null);
+    super.new(name,parent);
+    fifo_cg=new();
+endfunction
+
+function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    mon2subs=new("mon2subs",this);
+endfunction
 
 covergroup fifo_cg();
-      we_cp:coverpoint trans.we;
-      re_cp:coverpoint trans.re;
-      full_cp:coverpoint trans.full;
-      empty_cp:coverpoint trans.empty;
-      data__in_cp:coverpoint trans.data_in {
-            bins b1[10] = {[0:30]};
-      }
-      cp_data: coverpoint trans.data_in {
-            bins corners = {32'h0, 32'hFFFF_FFFF, 32'hAAAA_AAAA, 32'h5555_5555};
-      }
-      ctrl_status_cross: cross we_cp, re_cp, full_cp, empty_cp {
-            bins write_while_full = binsof(we_cp) intersect {1} && binsof(full_cp) intersect {1};
-            bins read_while_empty = binsof(re_cp) intersect {1} && binsof(empty_cp) intersect {1};
-      }
-   endgroup
+    we_cp: coverpoint trans.we iff(1) {
+        bins we_high = {1};
+        bins we_low = {0};
+    }
+    re_cp: coverpoint trans.re iff(1) {
+        bins re_high = {1};
+        bins re_low = {0};
+    }
+    data_in_cp: coverpoint trans.data_in iff(1) {
+        bins data_in_zero = {0};
+        bins data_in_non_zero = {[1:32'hFFFFFFFF]};
+    }
+    full_cp: coverpoint trans.full iff(1) {
+        bins full_high = {1};
+        bins full_low = {0};
+    }
+    empty_cp: coverpoint trans.empty iff(1) {
+        bins empty_high = {1};
+        bins empty_low = {0};
+    }
+    we_re_cp: cross trans.we, trans.re iff(1);
+    we_data_in_cp: cross trans.we, trans.data_in iff(1);
+    re_data_in_cp: cross trans.re, trans.data_in iff(1);
+endgroup
 
-   function new(string name="coverage_container", uvm_component parent=null);
-      super.new(name, parent);
-      fifo_cg = new(); 
-   endfunction
+function void write(transaction t);
+    mon2subs.write(t); 
+endfunction
 
-   //automated method for sampling
-   virtual function void write(transaction t);
-      this.trans = t; 
-      fifo_cg.sample();
-   endfunction
+task run_phase(uvm_phase phase);
+    forever begin
+        mon2subs.get(trans);
+        fifo_cg.sample();
+    end
+endtask
 
-    //manual sample where is necessary
-   virtual function void sample_manual(transaction t);
-      this.trans = t;
-      fifo_cg.sample();
-   endfunction
-
-   function void check_phase(uvm_phase phase);
-      $display("----------------------------------------------------------------");
-      `uvm_info("CONTAINER_COVERAGE", $sformatf("%0f%%", fifo_cg.get_inst_coverage()), UVM_NONE);
-      $display("----------------------------------------------------------------");
-   endfunction
+function void check_phase(uvm_phase phase);
+    $display("----------------------------------------------------------------");
+    `uvm_info("MY_COVERAGE",$sformatf("%0f",fifo_cg.get_coverage()),UVM_NONE);
+    $display("----------------------------------------------------------------");
+endfunction
 endclass
 `endif
