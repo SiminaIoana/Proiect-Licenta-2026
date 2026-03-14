@@ -20,4 +20,3 @@ if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 :: rfunctional coverage report
 call xcrg -dir ./coverage_db -db_name my_cov_db -report_format text -report_dir ./coverage_report_text
 
-pause

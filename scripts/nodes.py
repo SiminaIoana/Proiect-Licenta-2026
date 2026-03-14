@@ -263,16 +263,50 @@ def checker_node(state: AgentState):
         cov_match = re.search(r'MY_COVERAGE.*?(\d+\.\d+|\d+)', raw_errors)
 
         if cov_match:
-            coverage_val = cov_match.group(1) + "%"
+            coverage_float = float(cov_match.group(1))
+            coverage_val = f"{coverage_float}%"
+
+            if coverage_float < 75.0:
+                status = "LOW COVERAGE"
+                error_summary= "Coverage beloe target!"
+                print(f"Compilation SUCCESSFUL, but COVERAGE IS TOO LOW: {coverage_float}. Target is 75%.")
+
+                errors = f"Compilation was Successful, but functional coverage is only: {coverage_float}. The target is 75.0%. Please check the Action Plan and add more meaningful coverpoints, bins, or cross coverage to increase the value. DO NOT change the template strcuture."
+
+                with open(raport_path, "a") as file:
+                    file.write(f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val}\n")
+                    file.write(f"Feedback send to agent: {errors}\n")
+                    file.write("-" * 50 + "\n")       
+
+                with open(csv_path, mode='a', newline='') as file:
+                    csv.writer(file).writerow([timestamp, it, status, exec_time, coverage_val, error_summary]) 
+                
+                return {"compilation_error": errors}
+            else:
+                status = "SUCCESS"
+                error_summary = "None"
+                print(f"Compilation SUCCESSFUL, Target reached | Time exec: {exec_time} sec | COVERAGE : {coverage_val}\n")
+                with open(raport_path, "a") as file:
+                    file.write(f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val}\n")
+                    file.write("-" * 50 + "\n")
+
+                with open(csv_path, mode='a', newline='') as file:
+                    csv.writer(file).writerow([timestamp, it, status, exec_time, coverage_val, error_summary])
+                
+                return {"compilation_error": ""}    
+
         else:
             coverage_val = "Extraction coverage value FAILED"
+            status = "FAILED"
+            error_summary = "Coverage Parse Error"
+            errors = "Compilation successful, but could not extract MY_COVERAGE from logs. Make sure check_phase prints it."
+            print(f"Error: {errors}")
 
-        print(f"Compilation SUCCESSFUL! No errors. | Time exec: {exec_time} sec | COVERAGE : {coverage_val}\n")
+            with open(raport_path, "a") as file:
+                file.write(f"[{timestamp}]  Iteration: {it} | Status: {status} | Error: {errors}\n")
+                file.write("-" * 50 + "\n")
+                
+            with open(csv_path, mode='a', newline='') as file:
+                csv.writer(file).writerow([timestamp, it, status, exec_time, coverage_val, error_summary])
 
-        with open(raport_path, "a") as f:
-            f.write(f"[{timestamp}]  Iteration: {it} | Erors: No errors\n")
-            f.write("=" * 50 + "\n\n")
-
-        with open(csv_path, mode = 'a', newline='') as file:
-            csv.writer(file).writerow([timestamp,it, status, exec_time, coverage_val, error_summary])
-        return {"compilation_error": ""}
+            return {"compilation_error": errors}

@@ -7,7 +7,7 @@ class coverage_container extends uvm_subscriber#(transaction);
 
 uvm_tlm_analysis_fifo#(transaction) mon2subs;
 transaction trans;
-
+   
 function new(string name="coverage_container",uvm_component parent=null);
     super.new(name,parent);
     fifo_cg=new();
@@ -19,29 +19,28 @@ function void build_phase(uvm_phase phase);
 endfunction
 
 covergroup fifo_cg();
-    we_cp: coverpoint trans.we iff(1) {
-        bins we_high = {1};
-        bins we_low = {0};
+    coverpoint trans.we {
+        bins we_high = {1'b1};
+        bins we_low = {1'b0};
     }
-    re_cp: coverpoint trans.re iff(1) {
-        bins re_high = {1};
-        bins re_low = {0};
+    coverpoint trans.data_in {
+        bins data_in_low = {[32'h0000_0000:32'h0000_FFFF]};
+        bins data_in_high = {[32'h0001_0000:32'hFFFF_FFFF]};
     }
-    data_in_cp: coverpoint trans.data_in iff(1) {
-        bins data_in_zero = {0};
-        bins data_in_non_zero = {[1:32'hFFFFFFFF]};
+    coverpoint trans.full {
+        bins full_high = {1'b1};
+        bins full_low = {1'b0};
     }
-    full_cp: coverpoint trans.full iff(1) {
-        bins full_high = {1};
-        bins full_low = {0};
+    coverpoint trans.re {
+        bins re_high = {1'b1};
+        bins re_low = {1'b0};
     }
-    empty_cp: coverpoint trans.empty iff(1) {
-        bins empty_high = {1};
-        bins empty_low = {0};
+    coverpoint trans.empty {
+        bins empty_high = {1'b1};
+        bins empty_low = {1'b0};
     }
-    we_re_cp: cross trans.we, trans.re iff(1);
-    we_data_in_cp: cross trans.we, trans.data_in iff(1);
-    re_data_in_cp: cross trans.re, trans.data_in iff(1);
+    cross trans.we, trans.re;
+    cross trans.full, trans.empty;
 endgroup
 
 function void write(transaction t);

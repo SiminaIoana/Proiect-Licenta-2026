@@ -28,7 +28,7 @@ class sequence_1 extends base_sequence;
 
    task body();
       transaction trans;
-      repeat(10) begin
+      repeat(100) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
@@ -58,7 +58,7 @@ class sequence_2 extends base_sequence;
    task body();
       transaction trans;
       #20
-      repeat(20) begin
+      repeat(200) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
@@ -68,7 +68,7 @@ class sequence_2 extends base_sequence;
          finish_item(trans);
          `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
       end
-      repeat(15) begin
+      repeat(150) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
           trans.randomize with {
@@ -97,7 +97,7 @@ class sequence_3 extends base_sequence;
    endfunction
    task body();
       transaction trans;
-      repeat(10) begin
+      repeat(100) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
@@ -107,7 +107,7 @@ class sequence_3 extends base_sequence;
          finish_item(trans);
          `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
       end
-      repeat(20) begin
+      repeat(200) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
           trans.randomize with {
