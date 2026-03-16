@@ -1,9 +1,15 @@
+import os
+import datetime
+import time
+import csv
 from langgraph.graph import StateGraph, END, START
 from typing import Literal
 from config import initialize_llm
 from state import AgentState
-from nodes import rag_node, analyzer_node, generator_node, checker_node
-
+from nodes.rag_builder import rag_node
+from nodes.agents.analyzer import analyzer_node
+from nodes.agents.generator import generator_node
+from nodes.checking import checker_node
 # inti LLM
 initialize_llm()
 
@@ -50,7 +56,6 @@ def build_and_run():
     # compile
     app = workflow.compile()
 
-    # initial state
     initial_state = {
         "dut_specs": "Synchronous FIFO. Ports: write_enable (we), read_enable (re), full_signal, empty_signal, data_in (32-bit), data_out (32-bit). Reset is active low.",
         "action_plan": "",
@@ -58,9 +63,33 @@ def build_and_run():
         "compilation_error": "",
         "iterations": 0
     }
+    print("\n============= START LANGRGRAPH SYSTEM ===============\n")
 
-    print("\n=============START LANGRGRAPH SYSTEM===============\n")
-    app.invoke(initial_state)
+    start_time = time.time()
+    final_state = app.invoke(initial_state)
+    end_time = time.time()
+
+    total_time = end_time - start_time
+    total_iterations = final_state.get("iterations", 0)
+
+    # saved the metrics in file
+    results = os.path.join("..", "results")
+    os.makedirs(results, exist_ok=True)
+    csv_path = os.path.join(results, "global_results.csv")
+
+    file_exists = os.path.isfile(csv_path)
+
+    with open(csv_path, mode="a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["Timestamp", "Total Execution Time (s)", "Total Iterations"])
+        
+        # date, time for saving metrics
+        timestamp = datetime.datetime.now().strftime("%m/%d/%Y %H:%M")
+        writer.writerow([timestamp, f"{total_time:.2f}", total_iterations])
+    
+        print("\n============= STOP LANGRGRAPH SYSTEM ===============\n")
+
 
 if __name__ == "__main__":
     build_and_run()

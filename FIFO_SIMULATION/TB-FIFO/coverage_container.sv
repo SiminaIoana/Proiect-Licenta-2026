@@ -19,28 +19,27 @@ function void build_phase(uvm_phase phase);
 endfunction
 
 covergroup fifo_cg();
-    coverpoint trans.we {
-        bins we_high = {1'b1};
-        bins we_low = {1'b0};
+    we_cp: coverpoint trans.we {
+        bins we_high = {1};
+        bins we_low = {0};
     }
-    coverpoint trans.data_in {
-        bins data_in_low = {[32'h0000_0000:32'h0000_FFFF]};
-        bins data_in_high = {[32'h0001_0000:32'hFFFF_FFFF]};
+    re_cp: coverpoint trans.re {
+        bins re_high = {1};
+        bins re_low = {0};
     }
-    coverpoint trans.full {
-        bins full_high = {1'b1};
-        bins full_low = {1'b0};
+    data_in_cp: coverpoint trans.data_in {
+        bins data_in_zero = {0};
+        bins data_in_non_zero = {[1:32'hFFFFFFFF]};
     }
-    coverpoint trans.re {
-        bins re_high = {1'b1};
-        bins re_low = {1'b0};
+    full_cp: coverpoint trans.full {
+        bins full_high = {1};
+        bins full_low = {0};
     }
-    coverpoint trans.empty {
-        bins empty_high = {1'b1};
-        bins empty_low = {1'b0};
+    empty_cp: coverpoint trans.empty {
+        bins empty_high = {1};
+        bins empty_low = {0};
     }
-    cross trans.we, trans.re;
-    cross trans.full, trans.empty;
+    we_re_cross: cross we_cp, re_cp;
 endgroup
 
 function void write(transaction t);

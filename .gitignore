@@ -8,3 +8,5 @@ DOCS/
 xsim.dir/
 *.jou
 archives/
+__pycache__/
+*.pyc
