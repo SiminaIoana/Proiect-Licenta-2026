@@ -1,4 +1,5 @@
 @echo off
+cd /d %~dp0
 
 ::vivado settings
 call C:\Xilinx\2025.2\Vivado\settings64.bat
