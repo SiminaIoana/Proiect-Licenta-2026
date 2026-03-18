@@ -6,5 +6,8 @@ class AgentState(TypedDict):
     uvm_rules: str
     action_plan: str
     generated_code: str
-    compilation_error: str
     iterations: int
+    compilation_error: str
+    coverage_holes: str
+    status: str
+   

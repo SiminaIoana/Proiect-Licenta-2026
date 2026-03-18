@@ -1,4 +1,6 @@
 import os
+import re
+import csv
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext, load_index_from_storage
 
 #create or load index
@@ -40,3 +42,30 @@ def get_index(data_dir: str, storage_dir: str, index_name: str):
             print(f"An unexpected error occurred while created {index_name}: {e}")
             return None
 
+# function for extract SV code
+def extract_code(original_code: str) -> str:
+    generated_text = re.search(r"```systemverilog\n(.*?)```", original_code, re.DOTALL)
+    if generated_text:
+        return generated_text.group(1)
+    else:
+        return original_code
+    
+# function for saving the code on disk
+def save_code(original_code: str, file_path:str) ->str:
+    with open(file_path, 'w') as file:
+        file.write(original_code)
+    print(f"\nSystemVerilog code saved in {file_path}\n")
+
+# function for saving metrics in csv
+def save_to_csv(data_row , path):
+    file_exists = os.path.exists(path)
+    with open(path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(["Timestamp", "Iteration", "Status", "Time_Execution_sec", "Coverage", "Error_type"])
+        writer.writerow(data_row)
+
+#function for saving error status in txt
+def save_to_file(content, path):
+    with open(path, "a") as file:
+        file.write(content + "\n\n")

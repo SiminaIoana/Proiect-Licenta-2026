@@ -10,22 +10,28 @@ from nodes.rag_builder import rag_node
 from nodes.agents.analyzer import analyzer_node
 from nodes.agents.generator import generator_node
 from nodes.checking import checker_node
-# inti LLM
+
+# init LLM
 initialize_llm()
 
-# node for decisions
-def decision_step(state: AgentState) -> Literal["generator", "__end__"]:
-    error = state.get("compilation_error", "")
-    iteration = state.get("iterations",0)
+# function for routing files after checking
+def routing_files(state: AgentState):
+    status = state.get("status", "")
+    iteration = state.get("iterations", 0)
 
-    # errors generated 
-    if error != "" and iteration < 5 and "SYSTEM ERROR" not in error:
-        print(f"\nError detected. Redirecting to Generator")
+    if iteration >= 10:
+        print("\n MAX ITERATION REACHED --> STOP")
+        return "__end__"
+    if status == "FAILED":
+        print(f'Compilation Failed --> routing to GENERATOR\n')
         return "generator"
+    elif status == "LOW COVERAGE":
+        print(f'Coverage Holes Detected --> routing to ANALYZER\n')
+        return "analyzer"
+    else:
+        print("TARGET REACHED --> SUCCESS")
+        return "__end__"
     
-    # code works
-    return "__end__"
-
 
 def build_and_run():
     # initialize graph
@@ -51,17 +57,28 @@ def build_and_run():
     workflow.add_edge("generator", "checker")
 
     # conditional edge
-    workflow.add_conditional_edges("checker", decision_step, {"generator":"generator", "__end__" : END })
+    workflow.add_conditional_edges(
+        "checker", 
+        routing_files, 
+        {
+            "generator": "generator", 
+            "analyzer": "analyzer", 
+            "__end__": END 
+        }
+    )
 
     # compile
     app = workflow.compile()
 
     initial_state = {
         "dut_specs": "Synchronous FIFO. Ports: write_enable (we), read_enable (re), full_signal, empty_signal, data_in (32-bit), data_out (32-bit). Reset is active low.",
+        "uvm_rules": "",
         "action_plan": "",
         "generated_code": "",
+        "iterations": 0,
         "compilation_error": "",
-        "iterations": 0
+        "coverage_holes":"",
+        "status" : ""
     }
     print("\n============= START LANGRGRAPH SYSTEM ===============\n")
 

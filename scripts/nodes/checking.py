@@ -1,43 +1,15 @@
 import os
 import re
 import time
-import csv
 import datetime
 import subprocess
 from state import AgentState
 from config import VIVADO_BIN_PATH
-
-# function for extract SV code
-def extract_code(original_code: str) -> str:
-    generated_text = re.search(r"```systemverilog\n(.*?)```", original_code, re.DOTALL)
-    if generated_text:
-        return generated_text.group(1)
-    else:
-        return original_code
-    
-# function for saving the code on disk
-def save_code(original_code: str, file_path:str) ->str:
-    with open(file_path, 'w') as file:
-        file.write(original_code)
-    print(f"\nSystemVerilog code saved in {file_path}\n")
-
-# function for saving metrics in csv
-def save_to_csv(data_row , path):
-    file_exists = os.path.exists(path)
-    with open(path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(["Timestamp", "Iteration", "Status", "Time_Execution_sec", "Coverage", "Error_type"])
-        writer.writerow(data_row)
-
-#function for saving error status in txt
-def save_to_file(content, path):
-    with open(path, "a") as file:
-        file.write(content + "\n\n")
+from utils import extract_code, save_code, save_to_csv, save_to_file
 
 # function for extracting information from coverage raport
 def extract_coverage_holes(path: str)->str:
-    #parse txt raport and return a list with uncovered bins
+    # parse txt raport and return a list with uncovered bins
     holes = []
     try:
         with open(path,'r') as file:
@@ -147,7 +119,7 @@ def checker_node(state: AgentState):
         content_csv = [timestamp,it, status, exec_time, coverage_val, error_summary]
         save_to_csv(content_csv, csv_path)
 
-        return {"compilation_error": errors}
+        return {"status": status, "compilation_error": errors, "coverage_holes": ""}
     else:
         status = "SUCCESS"
         error_summary = "None"
@@ -159,25 +131,23 @@ def checker_node(state: AgentState):
             coverage_float = float(cov_match.group(1))
             coverage_val = f"{coverage_float}%"
 
-            if coverage_float < 75.0:
+            if coverage_float < 90.0:
                 status = "LOW COVERAGE"
                 error_summary= "Coverage below target!"
-                print(f"Compilation SUCCESSFUL, but COVERAGE IS TOO LOW: {coverage_float}. Target is 75%.")
+                print(f"Compilation SUCCESSFUL, but COVERAGE IS TOO LOW: {coverage_float}. Target is 90%.")
 
                 report_file_path = os.path.join(working_dir, "coverage_report_text", "xcrg_func_cov_report.txt")
                 holes = extract_coverage_holes(report_file_path)
 
-                errors = (f"Compilation was Successful, but functional coverage is only: {coverage_float}%. The target is 75.0%.\n"
-                          f"CRITICAL HOLES DETECTED in the coverage report:\n{holes}\n"
-                          f"Please update the coverpoints, bins, or cross coverage to cover these specific missing scenarios. DO NOT change the template structure.")
                 # save errors
-                content_txt = f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val} \n Feedback send to agent: {errors}\n" + "-" * 50
+                content_txt = f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val} \n Coverage Holes Sent to Analyzer: {holes}\n" + "-" * 50
                 save_to_file(content_txt, raport_path)
                 #save metrics
                 content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary]
                 save_to_csv(content_csv,csv_path)
                 
-                return {"compilation_error": errors}
+                return {"status": status, "compilation_error": "", "coverage_holes": holes} 
+                       
             else:
                 status = "SUCCESS"
                 error_summary = "None"
@@ -190,10 +160,9 @@ def checker_node(state: AgentState):
                 content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary]
                 save_to_csv(content_csv, csv_path)
  
-                return {"compilation_error": ""}    
-
+                return {"status": status, "compilation_error": "", "coverage_holes": ""}
         else:
-            coverage_val = "Extraction coverage value FAILED"
+            coverage_val = "Extraction coverage  value FAILED"
             status = "FAILED"
             error_summary = "Coverage Parse Error"
             errors = "Compilation successful, but could not extract MY_COVERAGE from logs. Make sure check_phase prints it."
@@ -206,4 +175,4 @@ def checker_node(state: AgentState):
             content_csv =  [timestamp, it, status, exec_time, coverage_val, error_summary]
             save_to_csv(content_csv, csv_path)
 
-            return {"compilation_error": errors}
+            return {"status": status, "compilation_error": errors, "coverage_holes": ""}

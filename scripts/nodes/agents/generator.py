@@ -7,57 +7,56 @@ def generator_node(state: AgentState):
     # getting errors if exists
     error = state.get("compilation_error", "")
     iterations = state.get("iterations", 0)
+    specs = state.get("dut_specs", "")
     llm = Settings.llm
 
     system_prompt = """You are an Expert SystemVerilog and UVM Developer.
                 YOUR ONLY TASK is to insert coverpoints into an EXACT existing template.
-                Do NOT invent a new class structure. Do NOT modify the functions provided in the template."""
+                Do NOT invent a new class structure. Do NOT modify the functions provided in the template.
+                
+                CRITICAL SYSTEMVERILOG SYNTAX RULES:
+                1. Always name your coverpoints if defining bins (e.g., `cp_data: coverpoint trans.data_in { bins b1 = {0}; }`).
+                2. NEVER declare the same variable as a coverpoint twice.
+                3. NEVER use temporal sequences (like `##1` or `=>`) inside a covergroup. Covergroups do not support SVA temporal syntax.
+                4. MEMORY LIMITATION: NEVER use an array of bins for a full 32-bit range like `bins my_bins[] = {[0:2**32-1]}`! This crashes the simulator. Instead, group values into a few safe interval bins WITHOUT brackets, for example: `bins low = {[1:100]}; bins mid = {[101:500]}; bins high = {[501:32'hFFFF_FFFE]};` and add corner cases like `bins zero = {0}; bins max_val = {32'hFFFF_FFFF};`.                """
+    template ="""
+`ifndef FIFO_COVERAGE_CONTAINER_UVM
+`define FIFO_COVERAGE_CONTAINER_UVM
 
-    template = """
-                `ifndef FIFO_COVERAGE_CONTAINER_UVM
-                `define FIFO_COVERAGE_CONTAINER_UVM
+`include "include.sv"
 
-                `include "include.sv"
-                class coverage_container extends uvm_subscriber#(transaction);
-                `uvm_component_utils(coverage_container)
+class coverage_container extends uvm_subscriber#(transaction);
+    `uvm_component_utils(coverage_container)
 
-                uvm_tlm_analysis_fifo#(transaction) mon2subs;
-                transaction trans;
-   
-                function new(string name="coverage_container",uvm_component parent=null);
-                    super.new(name,parent);
-                    fifo_cg=new();
-                endfunction
+    transaction trans;
 
-                function void build_phase(uvm_phase phase);
-                    super.build_phase(phase);
-                    mon2subs=new("mon2subs",this);
-                endfunction
+    covergroup fifo_cg();
+        // >>> GENERATE YOUR COVERPOINTS AND CROSSES HERE BASED ON THE ACTION PLAN <<<
+    endgroup
 
-                covergroup fifo_cg();
-                // >>> GENERATE YOUR COVERPOINTS AND CROSSES HERE BASED ON THE ACTION PLAN <<<
-                // IMPORTANT: Always use `trans.variable_name` (e.g., `coverpoint trans.we;`)
-                endgroup
+    function new(string name="coverage_container",uvm_component parent=null);
+        super.new(name, parent); 
+        fifo_cg = new();         
+    endfunction
 
-                function void write(transaction t);
-                    mon2subs.write(t); 
-                endfunction
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+    endfunction
 
-                task run_phase(uvm_phase phase);
-                forever begin
-                    mon2subs.get(trans);
-                    fifo_cg.sample();
-                    end
-                endtask
+    function void write(transaction t);
+        this.trans = t;
+        fifo_cg.sample();
+    endfunction
 
-                function void check_phase(uvm_phase phase);
-                    $display("----------------------------------------------------------------");
-                    `uvm_info("MY_COVERAGE",$sformatf("%0f",fifo_cg.get_coverage()),UVM_NONE);
-                $display("----------------------------------------------------------------");
-                endfunction
-            endclass
-        `endif
-        """
+    function void check_phase(uvm_phase phase);
+        $display("----------------------------------------------------------------");
+        `uvm_info("MY_COVERAGE",$sformatf("%0f",fifo_cg.get_coverage()),UVM_NONE);
+        $display("----------------------------------------------------------------");
+    endfunction
+
+endclass
+`endif
+"""
     # if errors appeared
     if error != "":
         print(f"\nNode 2 GENERATOR: Fixing problems and rewrite the code: Iteration number: {iterations+1}")
@@ -65,15 +64,15 @@ def generator_node(state: AgentState):
         user_prompt = f"""
                     The previous code failed with these errors:
                     {error} 
+                    REMEMBER the DUT Specifications:
+                    {specs}
+                    CRITICAL: Use ONLY variables defined in the specs (e.g. trans.we, trans.re, trans.data_in). Do NOT use generic names like trans.addr or trans.cmd!
+                    
                     Fix the coverpoints and output the COMPLETE code using EXACTLY this template:
                     {template}
                     """
     else:
         print("\nNode 2 GENERATOR: Reading the action plan and writing SV code...")
-        #user_prompt = f"""
-         #           Write the `fifo_coverage_container.sv` class based strictly on this Action Plan:
-          #          {plan}
-           #         """
         user_prompt = f"""
         Action Plan for Coverpoints:
         {plan}
@@ -91,4 +90,3 @@ def generator_node(state: AgentState):
     response = llm.complete(full_prompt)
 
     return {"generated_code": response.text, "iterations": iterations+1}
-
