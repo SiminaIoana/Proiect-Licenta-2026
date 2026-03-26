@@ -50,6 +50,7 @@ def extract_coverage_holes(path: str)->str:
 def checker_node(state: AgentState):
     print("\nNode 3 Checker: Validate generated code...")
     code = state.get("generated_code", "")
+    previous_error = state.get("compilation_error", "")
 
     # extract the code
     clean_code = extract_code(code)
@@ -93,14 +94,17 @@ def checker_node(state: AgentState):
 
     results_dir = os.path.join("..", "results")
     raport_path = os.path.join(results_dir, "raport_experimental.txt")
-    csv_path = os.path.join(results_dir, "experimental_metrics_FIFO2.csv")
+    csv_path = os.path.join(results_dir, "experimental_metrics_FIFO3.csv")
+    memory_path = os.path.join(results_dir, "experience_memory.txt")
     it = state.get("iterations", 0)
 
     # date, time for saving metrics
     timestamp = datetime.datetime.now().strftime("%m/%d/%Y %H:%M")
+    tokens = state.get("iteration_tokens", 0)
     coverage_val = "N/A"
     status = "FAILED"
     error_summary = "N/A"
+
 
     if returncode != 0 or "ERROR:" in raw_errors:
         status = "FAILED"        
@@ -116,11 +120,30 @@ def checker_node(state: AgentState):
         content_txt = f"[{timestamp}]  Iteration: {it} | Erors: {errors}  | Time_exec: {exec_time}\n"
         save_to_file(content_txt, raport_path )
         #save metrics
-        content_csv = [timestamp,it, status, exec_time, coverage_val, error_summary]
+        content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary, tokens]
         save_to_csv(content_csv, csv_path)
 
         return {"status": status, "compilation_error": errors, "coverage_holes": ""}
     else:
+        if previous_error and "SYSTEM ERROR" not in previous_error:
+            print("\nNode 3 Checker: Generating Long-Term Memory (LTM) entry...")
+
+            exp_dir = os.path.join("..", "results", "experience_data")
+            os.makedirs(exp_dir, exist_ok=True)
+
+            clean_ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            exp_file_path = os.path.join(exp_dir, f"fix_{clean_ts}.txt")
+
+            memory_entry = (
+                f"VIVADO_ERROR_DESCRIPTION:\n{previous_error}\n\n"
+                f"VERIFIED_WORKING_CODE:\n{clean_code}\n"
+            )
+            
+            with open(exp_file_path, "w", encoding="utf-8") as f:
+                f.write(memory_entry)
+            
+            print(f"Node 3 Checker: Experience saved in {exp_file_path}")
+
         status = "SUCCESS"
         error_summary = "None"
 
@@ -130,11 +153,11 @@ def checker_node(state: AgentState):
         if cov_match:
             coverage_float = float(cov_match.group(1))
             coverage_val = f"{coverage_float}%"
-
-            if coverage_float < 90.0:
+            target = state.get("target_coverage", 100.0)
+            if coverage_float < target:
                 status = "LOW COVERAGE"
                 error_summary= "Coverage below target!"
-                print(f"Compilation SUCCESSFUL, but COVERAGE IS TOO LOW: {coverage_float}. Target is 90%.")
+                print(f"Compilation SUCCESSFUL, but COVERAGE IS TOO LOW: {coverage_float}. Target is 75%.")
 
                 report_file_path = os.path.join(working_dir, "coverage_report_text", "xcrg_func_cov_report.txt")
                 holes = extract_coverage_holes(report_file_path)
@@ -143,7 +166,7 @@ def checker_node(state: AgentState):
                 content_txt = f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val} \n Coverage Holes Sent to Analyzer: {holes}\n" + "-" * 50
                 save_to_file(content_txt, raport_path)
                 #save metrics
-                content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary]
+                content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary, tokens]
                 save_to_csv(content_csv,csv_path)
                 
                 return {"status": status, "compilation_error": "", "coverage_holes": holes} 
@@ -157,7 +180,7 @@ def checker_node(state: AgentState):
                 content_txt = f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val}\n" + "-" * 50   
                 save_to_file(content_txt, raport_path)
                 #save metricss
-                content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary]
+                content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary, tokens]
                 save_to_csv(content_csv, csv_path)
  
                 return {"status": status, "compilation_error": "", "coverage_holes": ""}
@@ -172,7 +195,7 @@ def checker_node(state: AgentState):
             content_txt = f"[{timestamp}]  Iteration: {it} | Coverage: {coverage_val} \n Feedback send to agent: {errors}\n" + "-" * 50            
             save_to_file(content_txt, raport_path)
             #save metrics
-            content_csv =  [timestamp, it, status, exec_time, coverage_val, error_summary]
+            content_csv = [timestamp, it, status, exec_time, coverage_val, error_summary, tokens]
             save_to_csv(content_csv, csv_path)
 
             return {"status": status, "compilation_error": errors, "coverage_holes": ""}

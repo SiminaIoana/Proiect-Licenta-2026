@@ -9,47 +9,66 @@ class coverage_container extends uvm_subscriber#(transaction);
     transaction trans;
 
     covergroup fifo_cg();
-        // Coverpoint for we: to cover all possible values of we (0 and 1)
-        cp_we: coverpoint trans.we {
-            bins we_0 = {0};
-            bins we_1 = {1};
+        // Coverpoint for full and empty signal combinations
+        cp_full_empty: coverpoint {trans.full, trans.empty} {
+            bins full_and_not_empty = {2'b10};
+            bins not_full_and_empty = {2'b01};
+            bins not_full_and_not_empty = {2'b00};
+            bins full_and_empty = {2'b11};
         }
 
-        // Coverpoint for re: to cover all possible values of re (0 and 1)
-        cp_re: coverpoint trans.re {
-            bins re_0 = {0};
-            bins re_1 = {1};
+        // Cross between full and empty signals
+        cp_full_empty_cross: cross trans.full, trans.empty;
+
+        // Coverpoint for write and read enable interactions
+        cp_we_re: coverpoint {trans.we, trans.re} {
+            bins write_only = {2'b10};
+            bins read_only = {2'b01};
+            bins write_and_read = {2'b11};
+            bins no_write_no_read = {2'b00};
         }
 
-        // Coverpoint for data_in: to cover all possible values of data_in (32-bit values)
+        // Cross between we and re
+        cp_we_re_cross: cross trans.we, trans.re;
+
+        // Coverpoint for data_in values
         cp_data_in: coverpoint trans.data_in {
-            bins zero = {0};
-            bins low = {[1:100]};
+            bins low = {[0:100]};
             bins mid = {[101:500]};
             bins high = {[501:32'hFFFF_FFFE]};
+            bins zero = {0};
             bins max_val = {32'hFFFF_FFFF};
         }
 
-        // Coverpoint for full: to cover all possible values of full (0 and 1)
-        cp_full: coverpoint trans.full {
-            bins full_0 = {0};
-            bins full_1 = {1};
+        // Coverpoint for data_out values
+        cp_data_out: coverpoint trans.data_out {
+            bins low = {[0:100]};
+            bins mid = {[101:500]};
+            bins high = {[501:32'hFFFF_FFFE]};
+            bins zero = {0};
+            bins max_val = {32'hFFFF_FFFF};
         }
 
-        // Coverpoint for empty: to cover all possible values of empty (0 and 1)
-        cp_empty: coverpoint trans.empty {
-            bins empty_0 = {0};
-            bins empty_1 = {1};
+        // Cross between data_in and data_out
+        cp_data_in_out_cross: cross trans.data_in, trans.data_out;
+
+        // Coverpoint for reset signal
+        cp_reset: coverpoint trans.reset {
+            bins reset_active = {0};
+            bins reset_inactive = {1};
         }
 
-        // Cross coverage for we and re
-        cp_we_re: cross cp_we, cp_re;
+        // Cross between reset and full/empty signals
+        cp_reset_full_empty_cross: cross trans.reset, trans.full, trans.empty;
 
-        // Cross coverage for we and full
-        cp_we_full: cross cp_we, cp_full;
+        // Coverpoint for clk signal
+        cp_clk: coverpoint trans.clk {
+            bins rising_edge = {1};
+            bins falling_edge = {0};
+        }
 
-        // Cross coverage for re and empty
-        cp_re_empty: cross cp_re, cp_empty;
+        // Cross between clk and we/re
+        cp_clk_we_re_cross: cross trans.clk, trans.we, trans.re;
     endgroup
 
     function new(string name="coverage_container",uvm_component parent=null);

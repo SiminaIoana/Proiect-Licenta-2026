@@ -1,28 +1,43 @@
 from llama_index.core import Settings, StorageContext, load_index_from_storage, VectorStoreIndex, SimpleDirectoryReader
 from state import AgentState
 from utils import get_index
+import tiktoken
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+token_counter = TokenCountingHandler(
+    tokenizer=tiktoken.get_encoding("cl100k_base").encode
+)
+
+Settings.callback_manager = CallbackManager([token_counter])
 
 # NODE 0 --> RAG-node
 def rag_node(state: AgentState):
+     
      print("\nNode 0 RAG NODE: Searching documentation...")
-     user_query = state.get("dut_specs", "General specification")
+
+     token_counter.reset_counts()
+
+     dynamic_path = state.get("dynamic_docs_path")
+     static_path = state.get("static_docs_path")
+     query_context = state.get("dut_specs", "General specification")
     
-     index_dynamic = get_index("../DOCS/rag_data_dynamic/", "../DOCS/storage_dynamic/", "Dynamic index")
-     dynamic_query_engine = index_dynamic.as_query_engine()
+     index_dynamic = get_index(dynamic_path, "../DOCS/storage_dynamic/", "Dynamic index")
+     index_static = get_index(static_path, "../DOCS/storage_static/", "Static index")
+    
+     dynamic_query = f"""
+     Analyze the design for: '{query_context}'. 
+     Extract all ports, signals, bit-widths, and functional behavior.
+     CRITICAL: Identify exact names of variables in the 'transaction' class 
+     (e.g., we, re, data_in, full, empty) to be used for UVM coverpoints.
+     """
+     dynamic_response = index_dynamic.as_query_engine().query(dynamic_query)
 
-     index_static = get_index("../DOCS/rag_data_static/", "../DOCS/storage_static/", "Static index")
-     static_query_engine = index_static.as_query_engine()
+     static_query = "Provide the syntax rules and a template for a UVM subscriber implementing functional coverage with a covergroup."
+     static_response = index_static.as_query_engine().query(static_query)
 
+     rag_tokens = token_counter.total_llm_token_count
 
-     # test 
-     dynamic_query = dynamic_query = """List all ports, signals, bit-widths, and functional behavior for the FIFO design described in the technical specification docs. 
-                                    Additionally, analyze the provided SystemVerilog code, specifically the 'fifo_intf' interface and the 'transaction' class. Extract the exact names of the variables declared in the 'transaction' class (such as 'we', 're', 'data_in', 'full', 'empty') so they can be accurately used to create coverpoints in a UVM subscriber.
-                                    """
-     dynamic_response = dynamic_query_engine.query(dynamic_query)
-
-     static_query = "Extract the rules and examples for implementing a class that extends uvm_subscriber. How should a covergroup and its coverpoints be defined and sampled inside this subscriber?"
-     static_response = static_query_engine.query(static_query)
      return {
-         "uvm_rules": static_response.response, 
-         "dut_specs": dynamic_response.response
+        "uvm_rules": str(static_response), 
+        "dut_specs": str(dynamic_response),
+        "iteration_tokens": rag_tokens
      }

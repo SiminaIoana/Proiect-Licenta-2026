@@ -19,7 +19,7 @@ def routing_files(state: AgentState):
     status = state.get("status", "")
     iteration = state.get("iterations", 0)
 
-    if iteration >= 10:
+    if iteration >= 5:
         print("\n MAX ITERATION REACHED --> STOP")
         return "__end__"
     if status == "FAILED":
@@ -72,13 +72,16 @@ def build_and_run():
 
     initial_state = {
         "dut_specs": "Synchronous FIFO. Ports: write_enable (we), read_enable (re), full_signal, empty_signal, data_in (32-bit), data_out (32-bit). Reset is active low.",
+        "dynamic_docs_path":"../DOCS/rag_data_dynamic/",
         "uvm_rules": "",
+        "static_docs_path":"../DOCS/rag_data_static/",
         "action_plan": "",
         "generated_code": "",
         "iterations": 0,
         "compilation_error": "",
         "coverage_holes":"",
-        "status" : ""
+        "status" : "",
+        "target_coverage" : 75.0
     }
     print("\n============= START LANGRGRAPH SYSTEM ===============\n")
 

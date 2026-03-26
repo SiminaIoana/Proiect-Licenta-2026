@@ -1,15 +1,18 @@
 from llama_index.core import Settings
 from state import AgentState
-
+import tiktoken
 # NODE 1 --> Analyzer
 def analyzer_node(state: AgentState):
     print("\nNode 1 ANALYZER: Reading specification..")
     specs = state.get("dut_specs", "")
     rules = state.get("uvm_rules", "")
+    error = state.get("compilation_error","")
     holes = state.get("coverage_holes", "")
-
     llm = Settings.llm
 
+    if error:
+        return {"action_plan": "DEBUG_MODE: Fix the compilation error reported by Vivado before adding new coverage features."}
+    
     if holes and holes.strip() != "":
         print("\n Node 1 ANALYZER: Anlyzing coverage holes...")
         prompt=f"""You are an Expert UVM Verification Engineer. 
@@ -26,7 +29,6 @@ def analyzer_node(state: AgentState):
             Do NOT write the SystemVerilog code yourself. Output ONLY the updated Action Plan clearly formatted.
             """
     else:
-        print("\nNode 1 ANALYZER: Reading specification for first iteration (Exhaustive Plan)...")
         prompt = f"""You are an Expert UVM Verification Architect. 
             Based on the following DUT Specifications, create a RIGOROUS and EXHAUSTIVE Action Plan for a UVM coverage container class (`uvm_subscriber`). 
 
@@ -47,5 +49,18 @@ def analyzer_node(state: AgentState):
             Output the Action Plan clearly formatted."""
     
     response = llm.complete(prompt)
+    # number of tokens used using standard encoding
+    encoding = tiktoken.get_encoding("cl100k_base")
 
-    return {"action_plan": response.text}
+    # prompt tokens 
+    prompt_tokens = len(encoding.encode(prompt))
+
+    #responde tokens
+    response_tokens = len(encoding.encode(response.text))
+
+    current_tokens = state.get("iteration_tokens", 0)
+    total_tokens = prompt_tokens + response_tokens + current_tokens
+    return {
+        "action_plan": response.text,
+        "iteration_token": total_tokens
+    }

@@ -1,0 +1,9 @@
+{
+    "dut_name": "Synchronous FIFO (32-bit)",
+    "dut_specs": "Synchronous FIFO. Ports: write_enable (we), read_enable (re), full_signal, empty_signal, data_in (32-bit), data_out (32-bit). Reset is active low.",
+    "dynamic_docs_path": "../DOCS/rag_data_dynamic/",
+    "static_docs_path": "../DOCS/rag_data_static/",
+    "sv_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/TB-FIFO/coverage_container.sv",
+    "bat_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/SIM-FIFO/MakeSVfile.bat",
+    "target_coverage": 95.0
+}
