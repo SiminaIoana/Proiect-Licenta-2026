@@ -10,106 +10,121 @@ from nodes.rag_builder import rag_node
 from nodes.agents.analyzer import analyzer_node
 from nodes.agents.generator import generator_node
 from nodes.checking import checker_node
+from nodes.human_interaction_node import human_interaction_node 
+from config import PROJECT_CONFIG
 
 # init LLM
 initialize_llm()
 
-# function for routing files after checking
-def routing_files(state: AgentState):
-    status = state.get("status", "")
-    iteration = state.get("iterations", 0)
+# =====================================================
+# ----------- ROUTING FROM START ----------------------
+# =====================================================
+def route_from_start(state: AgentState):
+    if state.get("status") == "IDLE":
+        return END
+    if state.get("status") == "WAITING_FOR_HUMAN":
+        return "human_interaction"
+    return "rag_builder"
 
-    if iteration >= 5:
-        print("\n MAX ITERATION REACHED --> STOP")
-        return "__end__"
-    if status == "FAILED":
-        print(f'Compilation Failed --> routing to GENERATOR\n')
-        return "generator"
-    elif status == "LOW COVERAGE":
-        print(f'Coverage Holes Detected --> routing to ANALYZER\n')
-        return "analyzer"
-    else:
-        print("TARGET REACHED --> SUCCESS")
-        return "__end__"
+# =====================================================
+# ----------- ROUTING FROM CHECKER -------------------
+# =====================================================
+def route_from_checker(state: AgentState):
+    print("[ROUTING]: Routing to ANALYZER...")
+    return "analyzer"
+
+# =====================================================
+# ----------- ROUTING FROM ANALYZER -------------------
+# =====================================================
+def route_from_analyzer(state: AgentState):
+    print("\n[ROUTING]: Routing to HUMAN INTERACTION...")
+    return "human_interaction"
+
+# =====================================================
+# ----------- ROUTING FROM HUMAN -------------------
+# =====================================================
+def route_from_human(state: AgentState):
+    if state.get("status") == "WAITING_FOR_HUMAN":
+        print("[ROUTING]: System is on PAUSE. Waiting for UI input...")
+        return END
+
+    cmd = state.get("user_command", "").strip().lower()
     
+    if cmd in ["stop", "exit", "quit", ""]:
+        return END
+    elif cmd in ["fix_syntax", "approve_plan", "reject_code"]:
+        return "generator"
+    elif cmd in ["fix_hole", "show_list"]:
+        return "analyzer"
+    elif cmd == "approve_code":
+        return "checker" 
+        
+    return END
+# =====================================================
+# ----------- BUILD LANGGRAPH SYSTEM ------------------
+# =====================================================
+workflow = StateGraph(AgentState)
+
+workflow.add_node("rag_builder", rag_node)
+workflow.add_node("analyzer", analyzer_node)
+workflow.add_node("generator", generator_node)
+workflow.add_node("checker", checker_node)
+workflow.add_node("human_interaction", human_interaction_node)
+
+# Flow definitions
+workflow.add_conditional_edges(START, route_from_start) 
+workflow.add_edge("rag_builder", "checker")
+workflow.add_edge("generator", "human_interaction")
+
+workflow.add_conditional_edges("checker", route_from_checker)
+workflow.add_conditional_edges("analyzer", route_from_analyzer)
+workflow.add_conditional_edges("human_interaction", route_from_human)
+
+app_graph = workflow.compile()
+
+
+# =====================================================
+# ----------- TERMINAL EXECUTION -----------
+# =====================================================
 
 def build_and_run():
-    # initialize graph
-    workflow = StateGraph(AgentState)
-
-    # adding rag_node
-    workflow.add_node("rag_builder", rag_node)
-
-    # adding nodes for analyzer and generator
-    workflow.add_node("analyzer", analyzer_node)
-    workflow.add_node("generator", generator_node)
-
-    #adding checker node
-    workflow.add_node("checker", checker_node)
-
-    # define flow
-    workflow.add_edge(START, "rag_builder")
-    workflow.add_edge("rag_builder", "analyzer")
-
-    # flow without rag_builder for experimental results
-    #workflow.add_edge(START, "analyzer")
-    workflow.add_edge("analyzer", "generator")
-    workflow.add_edge("generator", "checker")
-
-    # conditional edge
-    workflow.add_conditional_edges(
-        "checker", 
-        routing_files, 
-        {
-            "generator": "generator", 
-            "analyzer": "analyzer", 
-            "__end__": END 
-        }
-    )
-
-    # compile
-    app = workflow.compile()
-
     initial_state = {
-        "dut_specs": "Synchronous FIFO. Ports: write_enable (we), read_enable (re), full_signal, empty_signal, data_in (32-bit), data_out (32-bit). Reset is active low.",
-        "dynamic_docs_path":"../DOCS/rag_data_dynamic/",
+        "dut_specs": "",        
         "uvm_rules": "",
-        "static_docs_path":"../DOCS/rag_data_static/",
         "action_plan": "",
         "generated_code": "",
+        "target_file": "",      
+        "analyzer_mode": "",
         "iterations": 0,
         "compilation_error": "",
         "coverage_holes":"",
         "status" : "",
-        "target_coverage" : 75.0
+        "iteration_tokens": 0,
+        "user_command":""
     }
     print("\n============= START LANGRGRAPH SYSTEM ===============\n")
 
     start_time = time.time()
-    final_state = app.invoke(initial_state)
+    final_state = app_graph.invoke(initial_state)
     end_time = time.time()
 
     total_time = end_time - start_time
     total_iterations = final_state.get("iterations", 0)
 
-    # saved the metrics in file
     results = os.path.join("..", "results")
     os.makedirs(results, exist_ok=True)
     csv_path = os.path.join(results, "global_results.csv")
 
     file_exists = os.path.isfile(csv_path)
-
     with open(csv_path, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(["Timestamp", "Total Execution Time (s)", "Total Iterations"])
         
-        # date, time for saving metrics
         timestamp = datetime.datetime.now().strftime("%m/%d/%Y %H:%M")
         writer.writerow([timestamp, f"{total_time:.2f}", total_iterations])
     
-        print("\n============= STOP LANGRGRAPH SYSTEM ===============\n")
-
+    print("\n============= STOP LANGRGRAPH SYSTEM ===============\n")
 
 if __name__ == "__main__":
     build_and_run()

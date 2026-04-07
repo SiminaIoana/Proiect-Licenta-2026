@@ -1,3 +1,4 @@
+// FILE: top.sv
 `include "include.sv"
 
 module top;
@@ -35,7 +36,7 @@ initial begin
 end
 
 initial begin
-   run_test("test_case_1");
+   run_test("test_case_2");
 end
   
 initial begin

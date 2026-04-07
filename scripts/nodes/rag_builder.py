@@ -3,6 +3,8 @@ from state import AgentState
 from utils import get_index
 import tiktoken
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+from config import PROJECT_CONFIG
+
 token_counter = TokenCountingHandler(
     tokenizer=tiktoken.get_encoding("cl100k_base").encode
 )
@@ -16,9 +18,9 @@ def rag_node(state: AgentState):
 
      token_counter.reset_counts()
 
-     dynamic_path = state.get("dynamic_docs_path")
-     static_path = state.get("static_docs_path")
-     query_context = state.get("dut_specs", "General specification")
+     dynamic_path = PROJECT_CONFIG["dynamic_docs_path"]
+     static_path = PROJECT_CONFIG["static_docs_path"]
+     query_context = PROJECT_CONFIG["rag_search_query"]
     
      index_dynamic = get_index(dynamic_path, "../DOCS/storage_dynamic/", "Dynamic index")
      index_static = get_index(static_path, "../DOCS/storage_static/", "Static index")

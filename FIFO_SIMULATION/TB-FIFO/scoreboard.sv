@@ -22,31 +22,34 @@ class scoreboard extends uvm_scoreboard;
    endfunction
 
    task run_phase(uvm_phase phase);
-      transaction trans;
-      forever begin
-         mon2scor.get(trans);
-         
-         if(pending_data_q.size() > 0) begin
-            bit [31:0] expected_val = pending_data_q.pop_front();
-            if(expected_val == trans.data_out) begin
-               `uvm_info("SCORE_MATCH", $sformatf("Match! Expected: %0h, Actual: %0h", expected_val, trans.data_out), UVM_LOW)
-            end else begin
-               `uvm_error("SCORE_MISMATCH", $sformatf("Mismatch! Expected: %0h, Actual: %0h", expected_val, trans.data_out))
-            end
-         end
+    transaction trans;
+    bit [31:0] expected_val;
+    bit check_needed = 0;
 
-         if(trans.we &&!trans.full) begin
-            wmem_q.push_back(trans.data_in);
-         end
-         
-         if(trans.re &&!trans.empty) begin
-            if(wmem_q.size() > 0) begin
-                pending_data_q.push_back(wmem_q.pop_front());
+    forever begin
+        mon2scor.get(trans);
+
+        
+        if(check_needed) begin
+            if(expected_val === trans.data_out) begin
+                `uvm_info("PASS", $sformatf("Match! Val: %0h", trans.data_out), UVM_LOW)
             end else begin
-                `uvm_error("SCOR_EMPTY_READ", "Eroare: S-a detectat citire din FIFO gol!");
+                `uvm_error("FAIL", $sformatf("Mismatch! Exp: %0h, Got: %0h", expected_val, trans.data_out))
             end
-         end
-      end
-   endtask
+            check_needed = 0;
+        end
+
+        if(trans.we && !trans.full) begin
+            wmem_q.push_back(trans.data_in);
+        end
+
+        if(trans.re && !trans.empty) begin
+            if(wmem_q.size() > 0) begin
+                expected_val = wmem_q.pop_front();
+                check_needed = 1;
+            end
+        end
+    end
+endtask
 endclass
 `endif

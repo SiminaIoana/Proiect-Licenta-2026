@@ -8,7 +8,7 @@ call C:\Xilinx\2025.2\Vivado\settings64.bat
 if exist xsim.dir rmdir /s /q xsim.dir
 if exist coverage_db rmdir /s /q coverage_db
 if exist coverage_report_text rmdir /s /q coverage_report_text
-
+if exist coverage_report_html rmdir /s /q coverage_report_html
 :: compile
 call xvlog -sv -L uvm "..\RTL-FIFO\dut.sv" "..\TB-FIFO\top.sv" -i "..\TB-FIFO"
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
@@ -21,3 +21,4 @@ if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 :: rfunctional coverage report
 call xcrg -dir ./coverage_db -db_name my_cov_db -report_format text -report_dir ./coverage_report_text
 
+call xcrg -dir ./coverage_db -db_name my_cov_db -report_format html -report_dir ./coverage_report_html
