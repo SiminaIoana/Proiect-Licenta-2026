@@ -1,56 +1,10 @@
 from llama_index.core import Settings
 from state import AgentState
-from utils import get_index, extract_code
+from utils import get_index, read_specific_files
 import os
 import tiktoken
 from config import PROJECT_CONFIG
 
-
-# ============================================================
-# ------- FUNCTION FOR READING RTL FILES ------
-# ============================================================
-def read_rtl(rtl_dir: str) -> str:
-    '''Read source files (.sv, .v) '''
-    content = ""
-    if not rtl_dir or not os.path.exists(rtl_dir):
-        return content
-
-    for root, _, files in os.walk(rtl_dir):
-        for file in files:
-           
-            if file.endswith(".v") or file.endswith(".sv"): 
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content += f"\n--- RTL FILE: {file} ---\n{f.read()}\n"
-                except Exception as e:
-                    pass
-    return content
-
-
-# ============================================================
-# ------- FUNCTION FOR READING TESTBENCH FILES ------
-# ============================================================
-def read_env(tb_dir: str) -> str:
-    '''Read source files (.sv, .v) '''
-    content = ""
-    if not tb_dir or not os.path.exists(tb_dir):
-        return content
-
-    for root, _, files in os.walk(tb_dir):
-        for file in files:
-            if file.endswith(".sv") or file.endswith(".v"):
-                
-                if "DEBUG" in file or "ai_proposed" in file or "unknown_file" in file:
-                    continue
-                    
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content += f"\n--- TB FILE: {file} ---\n{f.read()}\n"
-                except Exception as e:
-                    pass
-    return content
 
 
 # ==================================
@@ -72,8 +26,10 @@ def generator_node(state: AgentState):
     target_file = state.get("target_file", "unknown_file.sv")
 
     working_dir = os.path.dirname(PROJECT_CONFIG["bat_file_path"])
-    rtl_code = read_rtl(PROJECT_CONFIG.get("rtl_dir", ""))
-    env_code = read_env(PROJECT_CONFIG.get("tb_dir", ""))
+    directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", "")]
+    core_files = "transaction.sv, sequence.sv, test.sv"
+    files_to_read = f"{target_file}, {core_files}"
+    target_code = read_specific_files(files_to_read, directories_to_search)
 
     # ----------------------------------------------
     # --------- FIXING ERRORS ---------------
@@ -104,9 +60,8 @@ def generator_node(state: AgentState):
                     Search in memory to find something to help you to fix the problem:
                     {memory_section}
         
-                    CURRENT ENVIRONMENT AND RTL code:
-                    {env_code}
-                    {rtl_code}
+                    CURRENT ENVIRONMENT AND RTL code that needs to be fixed:
+                    {target_code}
         
                     DUT SPECIFICATIONS:
                     {specs}
@@ -128,26 +83,32 @@ def generator_node(state: AgentState):
                     {plan}
         
                     CURRENT ENVIRONMENT AND RTL:
-                    {env_code}
-                    {rtl_code}
-                    
+                    {target_code}
+                  
                     DUT SPECIFICATIONS:
                     {specs}
         
                     YOUR TASK:
-                    You must update or create the following file(s): {target_file}
-        
-                    Read the CURRENT ENVIRONMENT code provided above. Find the current implementation of the requested files (or create new ones if necessary), and rewrite them completely to incorporate the fixes from the Action Plan.
-        
-                    CRITICAL OUTPUT FORMAT:
-                    For EACH file you modify or create, enclose the complete updated code in its own standard markdown block (e.g., ```systemverilog ... ``` or ```tcl ... ```).
-                    The VERY FIRST LINE inside EACH markdown block MUST be a comment with the exact file name, exactly like this:
-                    // FILE: <name_of_the_file.ext>
-        
-                    ABSOLUTELY NO PLACEHOLDERS! You are writing to a disk that overwrites the file. DO NOT use shortcuts like "// ... existing code ..." or "// ... rest of the file ...". 
-                    You MUST output the ENTIRE file from the very first line to the very last line, integrating the new classes alongside all the old ones. If the file is 200 lines long, you must print all 200 lines.
-                 """
-    
+                    Based on the Action Plan, generate ONLY the NEW code that needs to be appended to the target files (e.g., the new sequence class and the new test class).
+                    
+                    CRITICAL INSTRUCTIONS:
+                    1. DO NOT rewrite or output the existing classes or existing code from the provided files.
+                    2. ONLY output the new classes that need to be added.
+                    3. For the new test class, ensure you properly instantiate the sequence and start it using the correct hierarchy from the current environment (e.g., seq.start(environment_h.agent_h.sequencer_h);).
+                    4. Enclose the code for each file in its own standard markdown block (```systemverilog ... ```).
+                    5. The VERY FIRST LINE inside EACH markdown block MUST be a comment with the exact file name you are targeting:
+                       // FILE: <name_of_the_file.ext>
+                    
+                    CRITICAL OUTPUT FORMAT FOR MODIFICATIONS:
+                    If you need to MODIFY an existing line (like changing the test name in top.sv), you MUST use this exact format:
+                    <<<< SEARCH
+                    (exact old code here)
+                        ==== REPLACE
+                    (new modified code here)
+                    >>>>
+
+                    If you are just ADDING a completely new class, just output the class code normally.
+                    """
     # combine user prompt with system prompt for Groq
     full_prompt = system_prompt + "\n\n" + user_prompt
     context_path = os.path.join(working_dir, "AI_CONTEXT.txt")
@@ -168,7 +129,6 @@ def generator_node(state: AgentState):
     response_tokens = len(encoding.encode(response.text))
     current_tokens = state.get("iteration_tokens", 0)
     total_tokens = prompt_tokens + response_tokens + current_tokens
-    #print("[GENERATOR]: Code generated successfully! Passing to Checker...")
 
     return {
         "generated_code": response.text,

@@ -81,8 +81,6 @@ workflow.add_conditional_edges("analyzer", route_from_analyzer)
 workflow.add_conditional_edges("human_interaction", route_from_human)
 
 app_graph = workflow.compile()
-
-
 # =====================================================
 # ----------- TERMINAL EXECUTION -----------
 # =====================================================

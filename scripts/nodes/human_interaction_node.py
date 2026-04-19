@@ -1,5 +1,5 @@
 from state import AgentState
-from utils import extract_code, save_code
+from utils import extract_code, save_code,apply_smart_injection
 from config import PROJECT_CONFIG
 import os
 
@@ -20,7 +20,6 @@ def human_interaction_node(state: AgentState):
     if not user_choice:
         ui_message = ""
 
-        # ADAUGĂ analyzer_mode == "syntax_debug" în condiție
         if (status == "FAILED" or analyzer_mode == "syntax_debug") and errors:
             ui_message += "### Vivado Compilation Failed\n\n"
             ui_message += "**The generated code has syntax errors:**\n"
@@ -144,30 +143,38 @@ def human_interaction_node(state: AgentState):
             return_dict["user_command"] = "approve_code"
             
             generated_code = state.get("generated_code", "")
+            
+            # 1. Extragem fișierele din textul generat de AI
             extracted_files = extract_code(generated_code)
             
             tb_dir = PROJECT_CONFIG.get("tb_dir", "")
             rtl_dir = PROJECT_CONFIG.get("rtl_dir", "")
             
+            # 2. Iterăm prin fiecare fișier (aici apare file_content!)
             for filename, file_content in extracted_files.items():
+                if not filename or "unknown_file" in filename: 
+                    continue
+                
                 file_path_to_save = None
-               
+                
+                # Căutăm în TB
                 for root, _, files in os.walk(tb_dir):
                     if filename in files:
                         file_path_to_save = os.path.join(root, filename)
                         break
 
+                # Căutăm în RTL dacă nu am găsit în TB
                 if not file_path_to_save:
                     for root, _, files in os.walk(rtl_dir):
                         if filename in files:
                             file_path_to_save = os.path.join(root, filename)
                             break
                             
+                # 3. INJECTĂM codul fix pentru acest fișier
                 if file_path_to_save:
-                    save_code(file_content, file_path_to_save)
+                    apply_smart_injection(file_path_to_save, file_content)
                 else:
-                    fallback_path = os.path.join(tb_dir, filename)
-                    save_code(file_content, fallback_path)
+                    print(f"[ERROR] Target file {filename} not found on disk for injection.")
             
         elif user_choice == '2':
             return_dict["user_command"] = "reject_code"
