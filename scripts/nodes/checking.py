@@ -4,7 +4,9 @@ import time
 import datetime
 import subprocess
 from state import AgentState
-from utils import extract_code, save_code, save_to_csv, save_to_file
+from scripts.utils_files.results_saving import save_to_csv, save_to_file
+from utils_files.file_ops import extract_code
+
 from config import PROJECT_CONFIG
 
 
@@ -121,6 +123,7 @@ def checker_node(state: AgentState):
             exp_file_path = os.path.join(exp_dir, f"fix_{clean_ts}.txt")
 
             memory_entry = (
+                
                 f"VIVADO_ERROR_DESCRIPTION:\n{previous_error}\n\n"
                 f"VERIFIED_WORKING_CODE:\n{clean_code}\n"
             )
@@ -134,17 +137,22 @@ def checker_node(state: AgentState):
         # ----------------------------------------------
         # ----- EXTRACT COVERAGE -----
         # ----------------------------------------------
-        cov_match = re.search(r'MY_COVERAGE.*?(\d+\.\d+|\d+)', raw_output)
+        if os.path.exists(report_file_path):
+            with open(report_file_path, 'r', encoding='utf-8') as f:
+                report_content = f.read()
+                cov_match = re.search(r'Coverage Score.*?(\d+\.\d+)', report_content, re.IGNORECASE)
+                if cov_match:
+                    coverage_float = float(cov_match.group(1))
+                    coverage_val = f"{coverage_float:.2f}%"
 
-        if cov_match:
-            coverage_float = float(cov_match.group(1))
-            coverage_val = f"{coverage_float}%"
-
-            status = "SUCCESS"
-            error_summary = "None"
-            analyzer_mode = "build_holes_list"
-            print(f"Compilation & Simulation SUCCESSFUL | Time exec: {exec_time} sec | COVERAGE : {coverage_val}\n")
-
+                    status = "SUCCESS"
+                    error_summary = "None"
+                    analyzer_mode = "build_holes_list"
+                    print(f"Compilation & Simulation SUCCESSFUL | Time exec: {exec_time} sec | COVERAGE : {coverage_val}\n")
+                else:
+                    coverage_val = "Extracted from holes"
+                    status = "SUCCESS"
+                    analyzer_mode = "build_holes_list"
         else:
             coverage_val = "Extraction coverage value FAILED"
             analyzer_mode = "syntax_debug"
@@ -157,6 +165,8 @@ def checker_node(state: AgentState):
     save_checker_metrics(state, status, exec_time, coverage_val, error_summary, errors)
             
     # ---- RETURN FINAL STATE -----
+    print(f"[DEBUG CHECKER] Final coverage_float: {coverage_float}")
+    print(f"[DEBUG CHECKER] Final coverage_val: {coverage_val}")
     return {
         "status": status, 
         "compilation_error": errors, 

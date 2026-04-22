@@ -1,6 +1,6 @@
-from llama_index.core import Settings, StorageContext, load_index_from_storage, VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core import Settings
 from state import AgentState
-from utils import get_index
+from utils_files.results_saving import get_index
 import tiktoken
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from config import PROJECT_CONFIG

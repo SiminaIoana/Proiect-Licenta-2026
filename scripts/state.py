@@ -29,6 +29,7 @@ class AgentState(TypedDict):
     analyzer_mode:              str             # analize FCOV and logs, build_holes_list, root_cause or compare_results
     status:                     str             # FAILED, SUCCESS, ANALYSIS_COMPLETE
     user_command:               str             # user interaction 
+    
 
     # -- TLM for analyzer agent --
     stimulus_memory_path:       str

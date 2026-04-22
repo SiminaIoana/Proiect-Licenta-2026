@@ -6,7 +6,6 @@ import uvm_pkg::*;
 `include "defines.sv"
 `include "interface.sv"
 `include "transaction.sv"
-`include "coverage_container.sv"
 `include "sequencer.sv"
 `include "driver.sv"
 `include "monitor.sv"

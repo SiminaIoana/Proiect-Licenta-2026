@@ -1,10 +1,14 @@
 from llama_index.core import Settings
 from state import AgentState
-from utils import get_index, read_specific_files
+
+from utils_files.file_ops import read_specific_files
+from utils_files.results_saving import get_index
+
 import os
 import tiktoken
 from config import PROJECT_CONFIG
 
+from prompts.generator_prompt import GENERATOR_SYSTEM_PROMPT, GENERATOR_FIX_HOLE_PROMPT, GENERATOR_FIX_SYNTAX_PROMPT
 
 
 # ==================================
@@ -17,7 +21,7 @@ def generator_node(state: AgentState):
 
     llm = Settings.llm
     encoding = tiktoken.get_encoding("cl100k_base")
-
+    feedback = state.get("user_feedback", "")
     plan = state.get("action_plan", "")
     error = state.get("compilation_error", "")
     iterations = state.get("iterations", 0)
@@ -52,65 +56,23 @@ def generator_node(state: AgentState):
         
         memory_section = f"\nRELEVANT PAST EXPERIENCE FOUND IN MEMORY:\n{ltm_content}\nReview this to avoid repeating the same error!\n" if ltm_content else ""
         
-        system_prompt = "You are an Expert SystemVerilog and UVM Developer."
-        user_prompt = f"""The simulation/compilation FAILED due to syntax or logical errors in the previously generated code.
-        
-                    VIVADO COMPILATION ERRORS:
-                    {error}
-                    Search in memory to find something to help you to fix the problem:
-                    {memory_section}
-        
-                    CURRENT ENVIRONMENT AND RTL code that needs to be fixed:
-                    {target_code}
-        
-                    DUT SPECIFICATIONS:
-                    {specs}
-        
-                    YOUR TASK:
-                    Based on the errors, identify which file is broken and rewrite it.
-                    Return the ENTIRE updated code for that specific file. 
-                    Enclose the SystemVerilog code in standard markdown ```systemverilog ... ``` blocks.
-                    The VERY FIRST LINE inside the markdown block MUST be a comment with the exact file name you are modifying, like this:
-                    // FILE: name_of_the_file.sv
-                    """
+        user_prompt = GENERATOR_FIX_SYNTAX_PROMPT.format(
+            error=error,
+            memory_section=memory_section,
+            target_code=target_code,
+            specs=specs
+        )
     
     # ------ FIX HOLES -----
     else:
         print(f"[GENERATOR]: Updating '{target_file}' based on Analyzer's Action Plan...")
-        system_prompt = "You are an Expert SystemVerilog and UVM Developer."
-        user_prompt = f"""The Analyzer has identified a coverage hole and created an action plan.
-                    ANALYZER'S ACTION PLAN:
-                    {plan}
-        
-                    CURRENT ENVIRONMENT AND RTL:
-                    {target_code}
-                  
-                    DUT SPECIFICATIONS:
-                    {specs}
-        
-                    YOUR TASK:
-                    Based on the Action Plan, generate ONLY the NEW code that needs to be appended to the target files (e.g., the new sequence class and the new test class).
-                    
-                    CRITICAL INSTRUCTIONS:
-                    1. DO NOT rewrite or output the existing classes or existing code from the provided files.
-                    2. ONLY output the new classes that need to be added.
-                    3. For the new test class, ensure you properly instantiate the sequence and start it using the correct hierarchy from the current environment (e.g., seq.start(environment_h.agent_h.sequencer_h);).
-                    4. Enclose the code for each file in its own standard markdown block (```systemverilog ... ```).
-                    5. The VERY FIRST LINE inside EACH markdown block MUST be a comment with the exact file name you are targeting:
-                       // FILE: <name_of_the_file.ext>
-                    
-                    CRITICAL OUTPUT FORMAT FOR MODIFICATIONS:
-                    If you need to MODIFY an existing line (like changing the test name in top.sv), you MUST use this exact format:
-                    <<<< SEARCH
-                    (exact old code here)
-                        ==== REPLACE
-                    (new modified code here)
-                    >>>>
-
-                    If you are just ADDING a completely new class, just output the class code normally.
-                    """
+        user_prompt = GENERATOR_FIX_HOLE_PROMPT.format(
+            plan=plan,
+            target_code=target_code,
+            specs=specs
+        )
     # combine user prompt with system prompt for Groq
-    full_prompt = system_prompt + "\n\n" + user_prompt
+    full_prompt = GENERATOR_SYSTEM_PROMPT + "\n\n" + user_prompt
     context_path = os.path.join(working_dir, "AI_CONTEXT.txt")
     with open(context_path, "w", encoding="utf-8") as f:
         f.write(full_prompt)

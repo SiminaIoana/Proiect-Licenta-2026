@@ -1,9 +1,14 @@
+import os
 from llama_index.core import Settings
+from scripts.utils_files.memory import save_analyzer_experience
+from scripts.utils_files.results_saving import get_index
 from state import AgentState
 import tiktoken
 from config import PROJECT_CONFIG
 import re
-from utils import extract_coverage_holes,extract_code, read_rtl,read_env,read_simulation_log,read_run_script,query_analyzer_memory
+from utils_files.coverage import extract_coverage_holes, extract_coverage_percent, filter_log_for_hole
+from utils_files.file_ops import read_rtl, read_env, read_simulation_log, read_run_script
+from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_ROOT_CAUSE_PROMPT
 
 # ==================================
 # ------- ANALYZER NODE ------
@@ -21,19 +26,35 @@ def analyzer_node(state: AgentState):
     #====================================
     if mode == "build_holes_list":
         fcov_path = state.get("fcov_report_path", "")
+        print(f"[DEBUG] fcov_report_path = '{fcov_path}'")
+        print(f"[DEBUG] File exists = {os.path.exists(fcov_path)}")
     
         # ---- PARSE FCOV REPORT ----
+        current_coverage = extract_coverage_percent(fcov_path)
+        print(f"[ANALYZER]: Current coverage score = {current_coverage}%")
+
         raw_holes = extract_coverage_holes(fcov_path)
-        '''
+        
         print("\n--- DEBUG RAW HOLES ---")
         print(raw_holes)
         print("-----------------------\n")
-        '''
+
+        if raw_holes.startswith("ERROR:"):
+            print(f"[ANALYZER ERROR]: {raw_holes}")
+            return {
+            "coverage_holes": raw_holes,
+            "holes_list": [],
+            "coverage_value": current_coverage,
+            "status": "FAILED"
+        }
+
+        
         if "No obvious coverage holes" in raw_holes or raw_holes.strip() == "":
             print("[ANALYZER]: Target reached! No holes found.")
             return {
                 "coverage_holes": raw_holes,
                 "holes_list": [],
+                "coverage_value": current_coverage,
                 "status": "ANALYSIS_COMPLETE" 
             }
         else:
@@ -51,6 +72,7 @@ def analyzer_node(state: AgentState):
             return {
                 "coverage_holes": raw_holes, 
                 "holes_list": structured_list,
+                "coverage_value": current_coverage,
                 "status": "ANALYSIS_COMPLETE"
             }
     #====================================
@@ -59,7 +81,7 @@ def analyzer_node(state: AgentState):
     elif mode == "root_cause":
         current_hole = state.get("current_hole",{})
         hole_description = current_hole.get('description', 'Unknown Hole')
-
+        current_coverage = state.get("coverage_value", 0.0)
         print(f"[ANALYZER]: Investigating root cause for -> {hole_description}")
 
         rtl_code = read_rtl(PROJECT_CONFIG.get("rtl_dir", ""))
@@ -68,51 +90,48 @@ def analyzer_node(state: AgentState):
 
         specs = state.get("dut_specs", "")
         run_script = read_run_script(PROJECT_CONFIG.get("run_script_path", ""))
+
+        sim_log_filtered = filter_log_for_hole(sim_log, hole_description)
         # ---- SAVING EXPERIENCE -----
-        #past_experience = query_analyzer_memory(hole_description)
-        #memory_section = f"\nPAST SUCCESSFUL EXPERIENCE:\n{past_experience}" if past_experience else ""
-        prompt = f"""You are an Expert UVM Verification Architect.
-                    We have a specific coverage hole in our FCOV report. Your job is to act as a detective and find out WHY it is happening and HOW to fix it.
+        ltm_path = os.path.join("..", "results", "LTM_analyzer")
+        past_experience=""
+        try:
+            if os.path.exists(ltm_path) and any(os.path.isfile(os.path.join(ltm_path, f)) for f in os.listdir(ltm_path)):
+                index_ltm = get_index(ltm_path, "../DOCS/storage_ltm_analyzer/", "Analyzer LTM")
+                if index_ltm:
+                    query_engine = index_ltm.as_query_engine(similarity_top_k=1)
+                    memory_response = query_engine.query(f"How did we fix a coverage hole like: {hole_description}")
+                    past_experience = str(memory_response)
+            else:
+                print(f"[ANALYZER INFO]: No past experiences found in {ltm_path}. Starting from scratch.")
+                past_experience = "No relevant past experience found."
+        except Exception as e:
+            print(f"[ANALYZER WARNING]: Memory indexing skipped: {e}")
+            past_experience = "No relevant past experience found."
         
-                    --- TARGET COVERAGE HOLE ---
-                    {hole_description}
+        # Secțiunea de memorie care va fi injectată în prompt
+        memory_section = f"\nPAST SUCCESSFUL EXPERIENCE:\n{past_experience}" if past_experience else ""
         
-                    --- SIMULATION LOG (xsim.log summary) ---
-                    {sim_log}
-        
-                    --- RTL DESIGN & UVM TESTBENCH FILES ---
-                    {rtl_code}
-                    {env_code}
+        # Formatăm prompt-ul (Asigură-te că ANALYZER_ROOT_CAUSE_PROMPT din prompts.py are placeholder-ul {past_experience})
+        prompt = ANALYZER_ROOT_CAUSE_PROMPT.format(
+            current_coverage=current_coverage,
+            hole_description=hole_description,
+            sim_log_filtered=sim_log_filtered,
+            rtl_code=rtl_code,
+            env_code=env_code,
+            run_script=run_script,
+            specs=specs,
+            past_experience=memory_section # Injectăm memoria aici
+        )
 
-                    --- RUN SCRIPT (Execution context) ---
-                    {run_script}
-                    --- DUT SPECIFICATIONS ---
-                    {specs}
-        
-                    INSTRUCTIONS FOR UVM DIAGNOSTIC:
-                    Perform a holistic check of the provided environment. Apply these universal UVM debugging rules:
-                    1. Run-Time Check: Look at the RUN SCRIPT. Does this test actually instantiate and start the sequence needed to cover the hole?
-                    2. Topology Check: Is the monitor's analysis port correctly connected to the coverage collector/subscriber?
-                    3. Stimulus Generation: If the hole requires new stimulus, DO NOT just hardcode narrow constraints into existing base/general sequences. Instead, suggest creating a NEW directed sequence class. 
-                    CRITICAL RULE: Always APPEND new sequence classes or test classes into the ALREADY EXISTING files (e.g., sequence.sv, test.sv). DO NOT create brand new .sv files for them!
-        
-                     CRITICAL OUTPUT RULES:
-                    - Your response MUST be in NATURAL LANGUAGE ONLY.
-                    - YOU ARE STRICTLY FORBIDDEN from outputting ANY ```systemverilog```, ```verilog```, or code blocks.
-                    - You are the ARCHITECT. You only write the plan. The Generator will write the code.
-        
-                    CRITICAL OUTPUT FORMAT:
-                    You MUST output your response exactly in the following structure:
-                    ROOT CAUSE ANALYSIS: <Explain why the hole exists based on the logs and code>
-                    ACTION PLAN: <Explain step-by-step what exact logic the Generator must add/modify>
-                    TARGET_FILES: <filename1.sv>, <filename2.sv>
-                """
-        
-        response = llm.complete(prompt)
-        # prompt tokens 
-        prompt_tokens = len(encoding.encode(prompt))
+        # Combinăm System Prompt cu User Prompt
+        full_prompt = ANALYZER_SYSTEM_PROMPT + "\n\n" + prompt
 
-        #responde tokens
+        # Trimiterea cererii către LLM
+        response = llm.complete(full_prompt)
+
+        # prompt tokens (Atenție să folosești full_prompt aici)
+        prompt_tokens = len(encoding.encode(full_prompt))
         response_tokens = len(encoding.encode(response.text))
 
         current_tokens = state.get("iteration_tokens", 0)
@@ -154,24 +173,37 @@ def analyzer_node(state: AgentState):
         fcov_path = state.get("fcov_report_path", "")
         new_holes_str = extract_coverage_holes(fcov_path)
 
+        new_coverage = extract_coverage_percent(fcov_path)
+        old_coverage = state.get("coverage_value", 0.0)
         target_hole = state.get("current_hole", {}).get("description", "")
 
-        analysis_result = ""
-        if target_hole and target_hole not in new_holes_str:
-            analysis_result = f" SUCCESS! The hole '{target_hole}' was successfully fixed and covered."
+        if new_coverage > old_coverage:
+            trend = f"📈 Coverage improved: {old_coverage}% → {new_coverage}%"
+        elif new_coverage < old_coverage:
+            trend = f"📉 Coverage DECREASED: {old_coverage}% → {new_coverage}% (rollback recommended!)"
         else:
-            analysis_result = f" FAILED. The code compiled, but '{target_hole}' is STILL UNCOVERED."
+            trend = f"➡️ Coverage unchanged: {new_coverage}%"
             
+        if target_hole and target_hole not in new_holes_str:
+            hole_result = f"✅ SUCCESS! The hole was fixed and covered."
+            action_plan = state.get("action_plan", "")
+            success_code = state.get("generated_code", "")
             
+            save_analyzer_experience(target_hole, action_plan, success_code)
+        else:
+            hole_result = f"❌ FAILED. The hole is STILL UNCOVERED."
+
+        analysis_result = f"{trend}\n{hole_result}"
         holes_lines = [line.strip() for line in new_holes_str.split("\n") if line.strip().startswith("-")]
         updated_list = [{"id": idx + 1, "description": line} for idx, line in enumerate(holes_lines)]
 
         return {
             "coverage_holes": new_holes_str,
             "holes_list": updated_list,
-            "root_cause_hole": analysis_result, 
+            "root_cause_hole": analysis_result,
+            "coverage_value": new_coverage, 
             "status": "ANALYSIS_COMPLETE",
-            "analyzer_mode": "compare_results" # Forțăm păstrarea acestui mod
+            "analyzer_mode": "compare_results" 
         }
     
     else:

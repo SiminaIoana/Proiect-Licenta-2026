@@ -76,12 +76,15 @@ class test_case_2 extends base_test;
 
 endclass
 
+
+
+
+// FILE: test.sv
 /*-------------------------------------------------------------*/
 /*---------------------TEST CASE 3-----------------------------*/
 /*-------------------------------------------------------------*/
 class test_case_3 extends base_test;
    `uvm_component_utils(test_case_3)
-
 
    function new(string name="test_case_3",uvm_component parent=null);
       super.new(name,parent);
@@ -95,34 +98,7 @@ class test_case_3 extends base_test;
       sequence_3 sequence_h;
       phase.raise_objection(this);
       sequence_h=sequence_3::type_id::create("sequence_h",this);
-      `uvm_info("TEST_SEQUENCE_STARTED","",UVM_NONE);
-      sequence_h.start(environment_h.agent_h.sequencer_h);
-      phase.drop_objection(this);
-   endtask
-endclass
-
-
-
-// FILE: test.sv
-/*-------------------------------------------------------------*/
-/*---------------------TEST CASE 4-----------------------------*/
-/*-------------------------------------------------------------*/
-class test_case_4 extends base_test;
-   `uvm_component_utils(test_case_4)
-
-   function new(string name="test_case_4",uvm_component parent=null);
-      super.new(name,parent);
-   endfunction
-
-   function void build_phase(uvm_phase phase);
-      super.build_phase(phase);
-   endfunction
-
-   task run_phase(uvm_phase phase);
-      sequence_4 sequence_h;
-      phase.raise_objection(this);
-      sequence_h=sequence_4::type_id::create("sequence_h",this);
-      `uvm_info("TEST_SEQUENCE_STARTED","Starting sequence_4 to cover data_in range [0:30]",UVM_NONE);
+      `uvm_info("TEST_SEQUENCE_STARTED","Starting sequence_3 to cover data_in [0:30]", UVM_NONE);
       sequence_h.start(environment_h.agent_h.sequencer_h);
       phase.drop_objection(this);
    endtask

@@ -4,7 +4,6 @@
 class scoreboard extends uvm_scoreboard;
    `uvm_component_utils(scoreboard)
    uvm_tlm_analysis_fifo#(transaction) mon2scor;
-   coverage_container cov_handler;
 
    bit [31:0] wmem_q[$];       
    bit [31:0] pending_data_q[$]; 
@@ -15,10 +14,7 @@ class scoreboard extends uvm_scoreboard;
 
    function void build_phase(uvm_phase phase);
       super.build_phase(phase);
-      mon2scor = new("mon2scor", this);
-      if(!uvm_config_db#(coverage_container)::get(this, "", "cov_handler", cov_handler))
-         `uvm_warning("COV", "Coverage handler not found or does not exist!")
-      
+      mon2scor = new("mon2scor", this);      
    endfunction
 
    task run_phase(uvm_phase phase);

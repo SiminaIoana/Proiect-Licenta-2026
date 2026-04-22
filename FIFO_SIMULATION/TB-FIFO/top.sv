@@ -36,7 +36,7 @@ initial begin
 end
 
 initial begin
-   run_test("test_case_4");
+   run_test();
 end
   
 initial begin

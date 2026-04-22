@@ -59,12 +59,6 @@ class subscriber extends uvm_subscriber#(transaction);
         
         ignore_bins no_read = binsof(re_cp.inactive);
     }
-   /*
-    rw_simultaneous_cross: cross we_cp, re_cp {
-        bins both_active   = binsof(we_cp.active) && binsof(re_cp.active);
-        ignore_bins others = !binsof(we_cp.active) || !binsof(re_cp.active);
-    }
-    */
     impossible_state_cross: cross full_cp, empty_cp {
         ignore_bins impossible = binsof(full_cp.is_full) && binsof(empty_cp.is_empty);
     }
