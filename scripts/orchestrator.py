@@ -45,6 +45,8 @@ def phase_controller_node(state: AgentState):
     elif phase == Phase.SELECT_HOLE:
         if cmd == "fix_hole":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
+        elif cmd == "show_list":
+            next_phase = Phase.BUILD_HOLES_LIST
         elif cmd in ["quit", "q"]:
             next_phase = Phase.DONE
 

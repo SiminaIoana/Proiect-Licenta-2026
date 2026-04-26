@@ -12,12 +12,13 @@ def inject_generated_code(state: AgentState):
 
     tb_dir = PROJECT_CONFIG.get("tb_dir", "")
     rtl_dir = PROJECT_CONFIG.get("rtl_dir", "")
+    bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
 
     for filename, file_content in extracted_files.items():
         if not filename or "unknown_file" in filename:
             continue
 
-        file_path_to_save = find_file_in_dirs(filename, [tb_dir, rtl_dir])
+        file_path_to_save = find_file_in_dirs(filename, [tb_dir, rtl_dir, bat_dir])
 
         if file_path_to_save:
             apply_smart_injection(file_path_to_save, file_content)
@@ -137,7 +138,7 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
 def create_rollback_checkpoint(state: AgentState):
     generated_code = state.get("generated_code", "")
     extracted_files = extract_code(generated_code)
-
+    bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
     tb_dir = PROJECT_CONFIG.get("tb_dir", "")
     rtl_dir = PROJECT_CONFIG.get("rtl_dir", "")
 
@@ -147,7 +148,7 @@ def create_rollback_checkpoint(state: AgentState):
         if not filename or "unknown_file" in filename:
             continue
 
-        file_path = find_file_in_dirs(filename, [tb_dir, rtl_dir])
+        file_path = find_file_in_dirs(filename, [tb_dir, rtl_dir, bat_dir])
 
         if file_path and os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
@@ -171,6 +172,39 @@ def restore_rollback_files(state: AgentState):
         "rollback_files": {},
         "ui_message": "Rollback completed. Previous code version was restored."
     }
+
+
+def normalize_user_input(user_input: str, phase: Phase) -> str:
+    text = user_input.strip().lower()
+
+    # global exit commands
+    if any(word in text for word in ["quit", "exit", "stop"]) or text == "q":
+        return "q"
+
+    # SELECT_HOLE: numbers mean hole IDs
+    if phase == Phase.SELECT_HOLE:
+        if text.isdigit():
+            return text
+
+        if any(word in text for word in ["list", "refresh", "reanalyze", "holes"]):
+            return "show_list"
+
+        return text
+
+    # PLAN_REVIEW / CODE_REVIEW / RESULT_REVIEW
+    if phase in [Phase.PLAN_REVIEW, Phase.CODE_REVIEW, Phase.RESULT_REVIEW]:
+
+        if any(word in text for word in ["approve", "accept", "continue", "yes", "ok", "go ahead"]) or text == "1":
+            return "1"
+
+        if any(word in text for word in ["reject", "regenerate", "retry", "try again", "new solution", "no"]) or text == "2":
+            return "2"
+
+        if phase == Phase.RESULT_REVIEW:
+            if any(word in text for word in ["rollback", "revert", "undo", "restore"]) or text == "3":
+                return "3"
+
+    return text
 # ==========================================
 # ---------- HUMAN INTERACTION ----------
 #===========================================
@@ -178,7 +212,8 @@ def human_interaction_node(state: AgentState):
     phase = state.get("phase", Phase.INIT)
     status = state.get("status", Status.PROCESSING)
     errors = state.get("compilation_error", "")
-    user_choice = state.get("ui_input", "").strip().lower()
+    raw_input = state.get("ui_input", "")
+    user_choice = normalize_user_input(raw_input, phase)
 
     # ------------------------------------------------------------
     # NO INPUT YET -> build UI message
@@ -210,6 +245,9 @@ def human_interaction_node(state: AgentState):
 
     # SELECT_HOLE
     if phase == Phase.SELECT_HOLE:
+        if user_choice == "show_list":
+            result["user_command"] = "show_list"
+            return result
         if user_choice.isdigit():
             hole_id = int(user_choice)
             holes_list = state.get("holes_list", [])
@@ -220,6 +258,11 @@ def human_interaction_node(state: AgentState):
                 result["user_command"] = "fix_hole"
             else:
                 result["ui_message"] = "Invalid ID. Please select a valid hole number."
+        else:
+            result["ui_message"] = (
+            "I could not understand which hole you want to analyze.\n\n"
+            "Please type a valid hole ID, **show list**, or **q**."
+        )
         return result
 
     # PLAN_REVIEW
@@ -228,6 +271,11 @@ def human_interaction_node(state: AgentState):
             result["user_command"] = "approve_plan"
         elif user_choice == "2":
             result["user_command"] = "show_list"
+        else:
+            result["ui_message"] = (
+            "I could not understand your decision.\n\n"
+            "Please type **approve**, **reject**, or **q**."
+            )
         return result
 
     if phase == Phase.RESULT_REVIEW:
@@ -237,6 +285,11 @@ def human_interaction_node(state: AgentState):
             result["user_command"] = "retry_same_hole"
         elif user_choice == "3":
             result["user_command"] = "rollback"
+        else:
+            result["ui_message"] = (
+            "I could not understand your request.\n\n"
+            "Please type **pick another hole**, **retry**, **rollback**, or **q**."
+        )
         return result
     
     # CODE_REVIEW
@@ -250,13 +303,21 @@ def human_interaction_node(state: AgentState):
 
         elif user_choice == "2":
             result["user_command"] = "reject_code"
-
+        
+        else:
+            result["ui_message"] = (
+            "I could not understand your decision.\n\n"
+            "Please type **approve**, **regenerate**, or **q**."
+            )
         return result
 
     return {
-        "ui_input": "",
-        "ui_message": "Invalid input for the current phase. Please try again."
-    }
+    "ui_input": "",
+    "user_command": "",
+    "ui_message": (
+        "I could not understand your request.\n\n"
+        "Please use one of the suggested options or provide a clearer instruction."
+    )}
 
 
 

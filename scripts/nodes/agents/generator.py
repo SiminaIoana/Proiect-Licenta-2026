@@ -31,8 +31,8 @@ def generator_node(state: AgentState):
     target_file = state.get("target_file", "unknown_file.sv")
 
     working_dir = os.path.dirname(PROJECT_CONFIG["bat_file_path"])
-    directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", "")]
-    core_files = "transaction.sv, sequence.sv, test.sv"
+    directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", ""), PROJECT_CONFIG.get("bat_file_path", "")]
+    core_files = "transaction.sv, sequence.sv, test.sv, MakeSVfile.bat"
     files_to_read = f"{target_file}, {core_files}"
     target_code = read_specific_files(files_to_read, directories_to_search)
 

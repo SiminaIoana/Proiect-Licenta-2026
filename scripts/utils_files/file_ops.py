@@ -182,7 +182,10 @@ def extract_code(original_code: str) -> dict:
             filename = file_match.group(1).strip()
             extracted_files[filename] = block.strip()
         else:
-            temp_name = f"extracted_temp_{len(extracted_files)}.sv"
+            if any(line.strip().startswith("@echo") for line in lines):
+                temp_name = f"extracted_temp_{len(extracted_files)}.bat"
+            else:
+                temp_name = f"extracted_temp_{len(extracted_files)}.sv"
             extracted_files[temp_name] = block.strip()
             
     return extracted_files

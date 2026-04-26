@@ -83,5 +83,4 @@ class sequence_2 extends base_sequence;
 
 endclass
 
-
 `endif
