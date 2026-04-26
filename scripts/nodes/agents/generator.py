@@ -1,3 +1,4 @@
+from scripts.utils_files.status import Status
 from llama_index.core import Settings
 from state import AgentState
 
@@ -93,9 +94,8 @@ def generator_node(state: AgentState):
     total_tokens = prompt_tokens + response_tokens + current_tokens
 
     return {
-        "generated_code": response.text,
-        "iteration_tokens": total_tokens,
-        "iterations": iterations + 1,
-        "analyzer_mode": "code_review",  
-        "status": "WAITING_FOR_HUMAN"
-    }
+     "generated_code": response.text,
+    "iteration_tokens": total_tokens,
+    "iterations": iterations + 1,
+    "status":   Status.SUCCESS
+}

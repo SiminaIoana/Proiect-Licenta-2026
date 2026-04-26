@@ -84,31 +84,4 @@ class sequence_2 extends base_sequence;
 endclass
 
 
-// FILE: sequence.sv
-/*-------------------------------------------------------------*/
-/*------------------------SEQUENCE_3---------------------------*/
-/*-------------------------------------------------------------*/
-class sequence_3 extends base_sequence;
-   `uvm_object_utils(sequence_3)
-
-   function new(string name="sequence_3");
-      super.new(name);
-   endfunction
-
-   task body();
-      transaction trans;
-      repeat(100) begin
-         trans=transaction::type_id::create("trans");
-         start_item(trans);
-         // Constrain data_in to the uncovered range [0:30]
-         trans.randomize with {
-                              data_in inside {[0:30]};
-                              re == 1;
-                              we == 1;
-                                 };
-         finish_item(trans);
-         `uvm_info("SEQUENCE_3", $sformatf("Generated data_in=0x%0h (%0d)", trans.data_in, trans.data_in), UVM_MEDIUM);
-      end
-   endtask
-endclass
 `endif
