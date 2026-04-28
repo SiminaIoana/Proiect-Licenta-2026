@@ -29,6 +29,8 @@ if %ERRORLEVEL% NEQ 0 echo [WARNING] test_case_2 failed!
 
 
 
+call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_data_ranges" -cov_db_name cov_test_data_ranges > xsim_test_data_ranges.log 2>&1
+if %ERRORLEVEL% NEQ 0 echo [WARNING] test_data_ranges failed!
 
 :: functional coverage report 
 call xcrg -dir ./coverage_db -report_format text -report_dir ./coverage_report_text

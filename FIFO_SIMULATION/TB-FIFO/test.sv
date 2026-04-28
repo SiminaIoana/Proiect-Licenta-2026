@@ -74,7 +74,33 @@ class test_case_2 extends base_test;
       phase.drop_objection(this);
    endtask
 
+
 endclass
 
+/*-------------------------------------------------------------*/
+/*---------------------TEST DATA RANGES------------------------*/
+/*-------------------------------------------------------------*/
+class test_data_ranges extends base_test;
+   `uvm_component_utils(test_data_ranges)
+
+   function new(string name="test_data_ranges",uvm_component parent=null);
+      super.new(name,parent);
+   endfunction
+
+   function void build_phase(uvm_phase phase);
+      super.build_phase(phase);
+   endfunction
+
+   task run_phase(uvm_phase phase);
+      sequence_data_ranges sequence_h;
+      phase.raise_objection(this);
+      sequence_h=sequence_data_ranges::type_id::create("sequence_h",this);
+      `uvm_info("TEST_DATA_RANGES","Starting sequence_data_ranges",UVM_NONE);
+      sequence_h.start(environment_h.agent_h.sequencer_h);
+      phase.drop_objection(this);
+   endtask
+
+endclass
 
 `endif
+

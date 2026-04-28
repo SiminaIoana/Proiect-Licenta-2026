@@ -4,13 +4,12 @@ from state import AgentState
 
 from utils_files.file_ops import read_specific_files
 from utils_files.results_saving import get_index
-
+from utils_files.prompt_utils import safe_format
 import os
 import tiktoken
 from config import PROJECT_CONFIG
 
 from prompts.generator_prompt import GENERATOR_SYSTEM_PROMPT, GENERATOR_FIX_HOLE_PROMPT, GENERATOR_FIX_SYNTAX_PROMPT
-
 
 # ==================================
 # ------- GENERATOR NODE ------
@@ -57,7 +56,8 @@ def generator_node(state: AgentState):
         
         memory_section = f"\nRELEVANT PAST EXPERIENCE FOUND IN MEMORY:\n{ltm_content}\nReview this to avoid repeating the same error!\n" if ltm_content else ""
         
-        user_prompt = GENERATOR_FIX_SYNTAX_PROMPT.format(
+        user_prompt = safe_format(
+            GENERATOR_FIX_SYNTAX_PROMPT,
             error=error,
             memory_section=memory_section,
             target_code=target_code,
@@ -67,7 +67,8 @@ def generator_node(state: AgentState):
     # ------ FIX HOLES -----
     else:
         print(f"[GENERATOR]: Updating '{target_file}' based on Analyzer's Action Plan...")
-        user_prompt = GENERATOR_FIX_HOLE_PROMPT.format(
+        user_prompt = safe_format(
+            GENERATOR_FIX_HOLE_PROMPT,
             plan=plan,
             target_code=target_code,
             specs=specs

@@ -11,6 +11,7 @@ from config import PROJECT_CONFIG
 import re
 from utils_files.phases import Phase
 from utils_files.status import Status
+from utils_files.prompt_utils import safe_format
 
 # ==================================
 # ------- ANALYZER NODE ------
@@ -131,6 +132,7 @@ def root_cause_analysis(state: AgentState):
                 query_engine = index_ltm.as_query_engine(similarity_top_k=1)
                 memory_response = query_engine.query(f"How did we fix a coverage hole like: {hole_description}")
                 past_experience = str(memory_response)
+                print(f"[ANALYZER INFO]: Retrieved past experience from LTM: {past_experience}")
         else:
             print(f"[ANALYZER INFO]: No past experiences found in {ltm_path}. Starting from scratch.")
             past_experience = "No relevant past experience found."
@@ -142,16 +144,17 @@ def root_cause_analysis(state: AgentState):
     memory_section = f"\nPAST SUCCESSFUL EXPERIENCE:\n{past_experience}" if past_experience else ""
         
     # Formatăm prompt-ul (Asigură-te că ANALYZER_ROOT_CAUSE_PROMPT din prompts.py are placeholder-ul {past_experience})
-    prompt = ANALYZER_ROOT_CAUSE_PROMPT.format(
-        current_coverage=current_coverage,
-        hole_description=hole_description,
-        sim_log_filtered=sim_log_filtered,
-        rtl_code=rtl_code,
-        env_code=env_code,
-        run_script=run_script,
-        specs=specs,
-        past_experience=memory_section # Injectăm memoria aici
-    )
+    prompt = safe_format(
+    ANALYZER_ROOT_CAUSE_PROMPT,
+    current_coverage=current_coverage,
+    hole_description=hole_description,
+    sim_log_filtered=sim_log_filtered,
+    rtl_code=rtl_code,
+    env_code=env_code,
+    run_script=run_script,
+    specs=specs,
+    past_experience=memory_section
+)
 
     # Combinăm System Prompt cu User Prompt
     full_prompt = ANALYZER_SYSTEM_PROMPT + "\n\n" + prompt

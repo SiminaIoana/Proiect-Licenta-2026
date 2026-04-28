@@ -11,8 +11,9 @@ from state import AgentState
 from nodes.rag_builder import rag_node
 from nodes.agents.analyzer import analyzer_node
 from nodes.agents.generator import generator_node
+from utils_files.injection import restore_rollback_files
 from nodes.checking import checker_node
-from nodes.human_interaction_node import human_interaction_node, restore_rollback_files
+from nodes.human_interaction_node import human_interaction_node
 from config import PROJECT_CONFIG
 # init LLM
 initialize_llm()
@@ -75,6 +76,8 @@ def phase_controller_node(state: AgentState):
     elif phase == Phase.PLAN_REVIEW:
         if cmd in ["approve_plan", "fix_syntax"]:
             next_phase = Phase.CODE_GENERATION
+        elif cmd == "retry_same_hole":
+            next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
         elif cmd in ["quit", "q"]:

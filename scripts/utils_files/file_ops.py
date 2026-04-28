@@ -176,7 +176,7 @@ def extract_code(original_code: str) -> dict:
         first_line = lines[0].strip()
         
         # // FILE: nume_fisier.ext"
-        file_match = re.search(r'//\s*FILE:\s*([a-zA-Z0-9_.]+\.[a-zA-Z0-9]+)', first_line, re.IGNORECASE)
+        file_match = re.search(r'(?:\/\/|::|#|REM)\s*FILE:\s*([a-zA-Z0-9_.]+\.[a-zA-Z0-9]+)',first_line,re.IGNORECASE)
         
         if file_match:
             filename = file_match.group(1).strip()
@@ -198,33 +198,3 @@ def save_code(original_code: str, file_path:str) ->str:
         file.write(original_code)
     print(f"\nSystemVerilog code saved in {file_path}\n")
 
-
-def apply_smart_injection(file_path: str, generated_code: str):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        pattern = r'<<<< SEARCH\n(.*?)\n==== REPLACE\n(.*?)\n>>>>'
-        matches = re.findall(pattern, generated_code, re.DOTALL)
-        
-        if matches:
-            for search_text, replace_text in matches:
-                if search_text in content:
-                    content = content.replace(search_text, replace_text)
-                    print(f"[INJECTOR] Replaced specific lines in {file_path}")
-                else:
-                    print(f"[WARNING] Could not find the exact lines to replace in {file_path}")
-        
-        else:
-            idx = content.rfind("`endif")
-            if idx != -1:
-                content = content[:idx] + "\n" + generated_code + "\n" + content[idx:]
-            else:
-                content = content + "\n\n" + generated_code + "\n"
-            print(f"[INJECTOR] Appended new classes to {file_path}")
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-    except Exception as e:
-        print(f"[INJECTOR ERROR] Failed to process {file_path}: {e}")

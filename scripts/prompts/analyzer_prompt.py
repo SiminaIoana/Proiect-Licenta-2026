@@ -41,12 +41,24 @@ STEP 2 — COVERGROUP CHECK:
   (wrong bins, wrong sampling point, wrong signal name)
   If yes → propose a covergroup fix only. Stop here.
 
-STEP 3 — CONSTRAINT CHECK:
-  Analyze if existing constraints are too broad or conflicting. 
-CRITICAL: Do not suggest 'easier' coverage goals. 
-Suggest DIRECTED constraints that target the EXACT missing bins. 
-Example: If bins are [0:10], suggest 'constraint target_bins {{ data_in <= 10; }}' 
-rather than modifying the covergroup
+
+STEP 3 — STIMULUS / CONSTRAINT CHECK:
+Are the existing sequences too random, too broad, or unlikely to hit the missing bins?
+If yes, choose CONSTRAINT_FIX.
+
+IMPORTANT:
+Prefer fixing coverage holes by adding directed stimulus inside sequences using inline randomization constraints.
+
+Do NOT suggest modifying transaction.sv constraints unless absolutely necessary.
+
+For data range holes, prefer this type of solution:
+trans.randomize with {
+    data_in inside {{[LOW:HIGH]}};
+};
+
+Do NOT weaken the coverage goal.
+Do NOT modify the covergroup just to make coverage easier.
+Suggest directed stimulus that targets the missing bins.
 
 STEP 4 — NEW SEQUENCE OR NEW TEST CLASS:
   - If the hole requires a specific data pattern or timing between transactions, suggest modifying/creating a SEQUENCE.

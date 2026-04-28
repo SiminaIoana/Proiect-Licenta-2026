@@ -30,7 +30,7 @@ class transaction extends uvm_sequence_item;
 
    constraint c_indata{data_in inside{[0:32'hFFFF_FFFF]};}
    constraint ctrl{soft re inside {0,1}; we inside {0,1};}
-
+   
 
    `uvm_object_utils_begin(transaction)
    `uvm_field_int(re,UVM_ALL_ON)
