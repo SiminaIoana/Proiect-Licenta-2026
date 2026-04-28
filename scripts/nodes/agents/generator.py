@@ -30,7 +30,8 @@ def generator_node(state: AgentState):
     target_file = state.get("target_file", "unknown_file.sv")
 
     working_dir = os.path.dirname(PROJECT_CONFIG["bat_file_path"])
-    directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", ""), PROJECT_CONFIG.get("bat_file_path", "")]
+    bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
+    directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", ""), bat_dir]
     core_files = "transaction.sv, sequence.sv, test.sv, MakeSVfile.bat"
     files_to_read = f"{target_file}, {core_files}"
     target_code = read_specific_files(files_to_read, directories_to_search)
@@ -66,13 +67,29 @@ def generator_node(state: AgentState):
     
     # ------ FIX HOLES -----
     else:
+        rejected_memory = ""
+        try:
+            index_rejected = get_index("../results/LTM_rejected/", "../DOCS/storage_ltm_rejected/", "Rejected LTM")
+
+            if index_rejected:
+                query_engine = index_rejected.as_query_engine(similarity_top_k=2)
+                rejected_response = query_engine.query(
+                f"What generated code patterns were rejected or caused errors for this plan: {plan}"
+                )
+                rejected_memory = str(rejected_response)
+        except Exception as e:
+            print(f"[GENERATOR WARNING]: Rejected LTM query skipped: {e}")
+            rejected_memory = ""
+
+
         print(f"[GENERATOR]: Updating '{target_file}' based on Analyzer's Action Plan...")
         user_prompt = safe_format(
             GENERATOR_FIX_HOLE_PROMPT,
             plan=plan,
             target_code=target_code,
-            specs=specs
-        )
+            specs=specs,
+            rejected_memory=rejected_memory
+            )
     # combine user prompt with system prompt for Groq
     full_prompt = GENERATOR_SYSTEM_PROMPT + "\n\n" + user_prompt
     context_path = os.path.join(working_dir, "AI_CONTEXT.txt")

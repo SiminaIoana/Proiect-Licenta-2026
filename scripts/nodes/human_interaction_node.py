@@ -2,6 +2,7 @@ from state import AgentState
 from utils_files.ui_messages import build_ui_message
 from utils_files.intent_parser import normalize_user_input
 from utils_files.injection import create_rollback_checkpoint, inject_generated_code
+from utils_files.memory import save_negative_experience
 from utils_files.phases import Phase
 from utils_files.status import Status
 
@@ -106,7 +107,11 @@ def human_interaction_node(state: AgentState):
 
         elif user_choice == "2":
             result["user_command"] = "reject_code"
-        
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_input
+        )
         else:
             result["ui_message"] = (
             "I could not understand your decision.\n\n"

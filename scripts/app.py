@@ -166,7 +166,11 @@ if should_run:
                             {"role": "assistant", "content": st.session_state.state["ui_message"]}
                                 ]
 
-                ai_msg = st.session_state.state.get("ui_message", "No message received from AI.")
+                ai_msg = st.session_state.state.get("ui_message")
+
+                if not ai_msg:
+                    ai_msg = "Processing completed. Please continue with the next available action."
+
                 st.markdown(ai_msg)
                 st.session_state.chat_history.append({"role": "assistant", "content": ai_msg})
                 

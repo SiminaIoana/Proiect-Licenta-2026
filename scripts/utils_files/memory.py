@@ -35,8 +35,7 @@ def save_analyzer_experience(hole_description: str, action_plan: str, success_co
     
     print(f"[ANALYZER LTM]: Good experience saved in:{file_path}")
 
-
-def save_negative_experience(hole_description, rejected_code, user_feedback):
+def save_negative_experience(hole_description, rejected_code, reason):
     exp_dir = os.path.join("..", "results", "LTM_rejected")
     os.makedirs(exp_dir, exist_ok=True)
     
@@ -44,10 +43,12 @@ def save_negative_experience(hole_description, rejected_code, user_feedback):
     file_path = os.path.join(exp_dir, f"rejected_{timestamp}.txt")
 
     entry = (
-        f"HOLE_DESCRIPTION: {hole_description}\n"
-        f"REJECTED_CODE_PATTERN:\n{rejected_code}\n"
-        f"USER_REASON_FOR_REJECTION: {user_feedback}\n"
+        f"COVERAGE_HOLE_DESCRIPTION:\n{hole_description}\n\n"
+        f"REJECTED_OR_FAILED_CODE:\n{rejected_code}\n\n"
+        f"REJECTION_OR_ERROR_REASON:\n{reason}\n"
     )
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(entry)
+
+    print(f"[NEGATIVE LTM]: Rejected experience saved in: {file_path}")

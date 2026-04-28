@@ -1,10 +1,9 @@
 # ==========================================
-# prompts.py
+# generator_prompt.py
 # ==========================================
 
-GENERATOR_SYSTEM_PROMPT = "You are an Expert SystemVerilog and UVM Developer."
+GENERATOR_SYSTEM_PROMPT = "You are an Expert SystemVerilog, UVM, and Vivado simulation-script Developer."
 
-# Promptul pentru adăugarea de secvențe/teste noi pentru coverage holes
 GENERATOR_FIX_HOLE_PROMPT = """The Analyzer has identified a coverage hole and created an action plan.
 
 ANALYZER'S ACTION PLAN:
@@ -16,83 +15,102 @@ CURRENT ENVIRONMENT, RTL, AND RUN SCRIPT:
 DUT SPECIFICATIONS:
 {specs}
 
+PREVIOUS REJECTED OR FAILED SOLUTIONS:
+{rejected_memory}
+
+Avoid repeating rejected code patterns, syntax mistakes, wrong file modifications, or user-disapproved strategies.
+
 YOUR TASK:
-Based on the Action Plan, generate ONLY the NEW code that needs to be appended to the target files (e.g., the new sequence class and the new test class).
+Generate ONLY new code that can be safely appended by the injector.
 
-CRITICAL INSTRUCTIONS:
-1. DO NOT rewrite or output existing classes or existing code.
-2. ONLY output the new classes that need to be added.
-3. For the new test class, ensure you properly instantiate the sequence and start it using the correct hierarchy from the current environment (e.g., seq.start(environment_h.agent_h.sequencer_h);).
-4. Enclose each file in its own markdown block using the correct language:
+VERY IMPORTANT ARCHITECTURAL RULE:
+The injector can only:
+- append new SystemVerilog classes before the final `endif
+- insert new MakeSVfile.bat commands before the coverage report section
+
+Therefore:
+- Do NOT generate partial code fragments that must be inserted inside an existing task/function/class.
+- Do NOT ask to modify the inside of an existing sequence body.
+- If the Analyzer's plan requires modifying an existing task, instead create a NEW sequence class that implements the corrected behavior.
+- If you create a NEW sequence class, you MUST also create a NEW test class that runs it.
+- If you create a NEW test class, you MUST also output a MakeSVfile.bat block that runs that exact test.
+
+STYLE RULE:
+Prefer the simplest maintainable solution.
+If one directed sequence and one test can cover the hole, do not create multiple duplicated sequences/tests.
+
+OUTPUT REQUIREMENTS:
+1. Return ONLY markdown code blocks. No explanations.
+2. Each modified file must be in its OWN markdown code block.
+3. The first line inside EACH code block MUST be:
+   // FILE: exact_filename.ext
+4. Use:
    - ```systemverilog for .sv files
-   - ```bat for .bat files
-5. The VERY FIRST LINE inside EACH markdown block MUST be a comment with the exact file name you are targeting:
-   // FILE: <name_of_the_file.ext>
+   - ```bat for MakeSVfile.bat
 
-
-IMPORTANT SYSTEMVERILOG PLACEMENT RULES:
+SYSTEMVERILOG RULES:
+- Output complete classes only, not floating statements.
+- Do NOT output code fragments intended to be inserted inside an existing method.
 - Do NOT place constraints outside a class.
-- Any constraint must be declared inside a SystemVerilog class.
-- If using inline constraints, place them only inside randomize with { ... } blocks.
 - Do NOT append constraints after endclass.
-- Do NOT generate floating SystemVerilog statements outside classes/modules.
-- Do NOT add constraints directly into transaction.sv unless the Analyzer explicitly says this is absolutely required.
-- Prefer inline constraints inside sequence randomize-with blocks.
-- If targeting a value range, use:
-  trans.randomize with {
-      data_in inside {[LOW:HIGH]};
-  };
-- Never append constraints after endclass.
+- Do NOT modify transaction.sv unless the Analyzer explicitly says it is absolutely required.
+- Prefer inline constraints inside randomize-with blocks.
+- If targeting a value range, use inline randomization inside a sequence:
+  trans.randomize with {{
+      data_in inside {{[LOW:HIGH]}};
+  }};
+- Always call start_item(trans) before randomize and finish_item(trans) after randomize.
+- The macro `uvm_info` MUST have exactly 3 arguments:
+  `uvm_info("TAG", "message", UVM_LEVEL)
+- Do NOT add a fourth argument to `uvm_info`.
 
-RUN SCRIPT RULE:
-If a new test class is created, MakeSVfile.bat must be updated to execute that exact test name.
-If you are unsure how to modify MakeSVfile.bat, still output a MakeSVfile.bat block with the intended test execution change.
-If you are just ADDING a completely new class, just output the class code normally inside the markdown block.
-Do not write any explanations, just return the code in the correct format.
+PLAN COMPLIANCE RULE:
+- Follow the Analyzer's goal, but respect the injector limitation above.
+- If the plan says to modify an existing sequence internally, create a new sequence class that reproduces the needed behavior safely.
+- Do NOT output partial internal edits.
+- Do NOT create unrelated tests or unrelated files.
+- The generated test name must exactly match the UVM_TESTNAME used in MakeSVfile.bat.
 
-RUN / INTEGRATION FILE RULES:
-If the generated code requires changes in any integration or execution file, you MUST output a separate code block for that file.
+RUN SCRIPT / VIVADO RULES:
+- The project uses Vivado, NOT ModelSim/Questa.
+- NEVER use vlog.
+- NEVER use vsim.
+- Use only Vivado-style xsim commands already present in the run script.
+- Do NOT output the full MakeSVfile.bat file.
+- For MakeSVfile.bat, output ONLY the new xsim command block needed to run the new test.
+- The MakeSVfile.bat block MUST start with:
+  // FILE: MakeSVfile.bat
 
-Examples of integration files:
-- MakeSVfile.bat
-- run scripts
-- top.sv
-- package/include files
-For MakeSVfile.bat, if a new test class is generated, output ONLY a new command in this style:
+The MakeSVfile.bat command block must follow this style:
 
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=<new_test_name>" -cov_db_name cov_<new_test_name> > xsim_<new_test_name>.log 2>&1
 if %ERRORLEVEL% NEQ 0 echo [WARNING] <new_test_name> failed!
 
-If you create a new test class, you MUST ensure that the test is actually compiled and executed.
-
-The solution is incomplete unless the generated stimulus is reachable during simulation.
-
----
-
 CRITICAL OUTPUT FORMAT:
 - Do NOT use SEARCH/REPLACE markers.
 - Do NOT output <<<< SEARCH, ====, REPLACE, or >>>>.
-- For .sv files, output only the new class or the corrected code fragment.
-- For script/integration files (e.g., MakeSVfile.bat):
-  Output the exact command or block that should be added, including enough context so it can be correctly inserted.
-  Do NOT output incomplete fragments.
+- Do NOT output full existing files.
+- Do NOT output existing classes.
+- Do NOT output comments like "add this inside...".
+- Output only valid code blocks that can be injected directly.
 
-NAMING RULE:
-The test name used in MakeSVfile.bat MUST exactly match the generated test class name.
-Do NOT invent file names. Use only files that exist in the provided context unless explicitly creating a new class.
+EXPECTED OUTPUT WHEN CREATING A NEW SEQUENCE:
+You normally need exactly these blocks:
+1. sequence.sv containing the complete new sequence class
+2. test.sv containing the complete new test class
+3. MakeSVfile.bat containing only the new xsim command block
 
+Return ONLY the code blocks.
 """
 
 
-# Promptul pentru repararea erorilor de compilare (Vivado errors)
-GENERATOR_FIX_SYNTAX_PROMPT = """The simulation/compilation FAILED due to syntax or logical errors in the previously generated code.
+GENERATOR_FIX_SYNTAX_PROMPT = """The simulation/compilation failed due to errors in generated or injected code.
 
 VIVADO COMPILATION ERRORS:
 {error}
 
 RELEVANT PAST EXPERIENCE FOUND IN MEMORY:
 {memory_section}
-Review this to avoid repeating the same error!
 
 CURRENT ENVIRONMENT, RTL, AND RUN SCRIPT:
 {target_code}
@@ -101,11 +119,41 @@ DUT SPECIFICATIONS:
 {specs}
 
 YOUR TASK:
-Based on the errors, identify which file is broken and rewrite it.
-Return the ENTIRE updated code for that specific file.
-Enclose the SystemVerilog code in standard markdown ```systemverilog ... ``` blocks.
-The VERY FIRST LINE inside the markdown block MUST be a comment with the exact file name you are modifying, like this:
-// FILE: name_of_the_file.sv
+Fix only the generated code that caused the error.
 
-Do not write any explanations, just return the fixed code in the correct format.
+VERY IMPORTANT:
+The injector can only:
+- append new SystemVerilog classes before the final `endif
+- insert new MakeSVfile.bat commands before the coverage report section
+
+Therefore:
+- Do NOT output partial code fragments that must be inserted inside an existing task/function/class.
+- Do NOT output SEARCH/REPLACE markers.
+- If a previous generated class is broken, output the complete corrected class.
+- If a MakeSVfile.bat command is wrong, output only the corrected xsim command block.
+
+OUTPUT REQUIREMENTS:
+1. Return ONLY markdown code blocks. No explanations.
+2. Each file must be in its OWN code block.
+3. The first line inside EACH code block MUST be:
+   // FILE: exact_filename.ext
+4. Use:
+   - ```systemverilog for .sv files
+   - ```bat for MakeSVfile.bat
+
+SYSTEMVERILOG RULES:
+- Do NOT place constraints outside a class.
+- Do NOT append constraints after endclass.
+- The macro `uvm_info` MUST have exactly 3 arguments:
+  `uvm_info("TAG", "message", UVM_LEVEL)
+- Do NOT add a fourth argument to `uvm_info`.
+
+VIVADO SCRIPT RULES:
+- The project uses Vivado, NOT ModelSim/Questa.
+- NEVER use vlog.
+- NEVER use vsim.
+- Use xsim-style commands only.
+- Do NOT output the full MakeSVfile.bat file.
+
+Return ONLY the fixed code blocks.
 """

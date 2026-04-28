@@ -4,6 +4,7 @@ import datetime
 import subprocess
 from state import AgentState
 from scripts.utils_files.results_saving import save_to_csv, save_to_file
+from utils_files.memory import save_negative_experience
 from utils_files.file_ops import extract_code
 from utils_files.status import Status
 from config import PROJECT_CONFIG
@@ -152,6 +153,12 @@ def checker_node(state: AgentState):
         errors, error_summary = parse_vivado_failure(raw_output)
         status = Status.FAILED
         coverage_val = "N/A"
+        if state.get("generated_code"):
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                errors
+            )
 
         print(f"Compilation FAILED (Time: {exec_time}s): \n {errors}")
 

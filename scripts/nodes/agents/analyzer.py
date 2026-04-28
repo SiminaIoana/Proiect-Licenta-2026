@@ -119,7 +119,7 @@ def root_cause_analysis(state: AgentState):
     sim_log = read_simulation_log(state.get("simulation_log_path", ""))
 
     specs = state.get("dut_specs", "")
-    run_script = read_run_script(PROJECT_CONFIG.get("run_script_path", ""))
+    run_script = read_run_script(PROJECT_CONFIG.get("bat_file_path", ""))
 
     sim_log_filtered = filter_log_for_hole(sim_log, hole_description)
     # ---- SAVING EXPERIENCE -----
