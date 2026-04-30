@@ -32,7 +32,8 @@ def human_interaction_node(state: AgentState):
     # ------------------------------------------------------------
     result = {
         "ui_input": "",
-        "user_command": ""
+        "user_command": "",
+        "user_feedback": state.get("user_feedback", "")
     }
 
     if user_choice == "q":
@@ -58,6 +59,7 @@ def human_interaction_node(state: AgentState):
             if selected_hole:
                 result["current_hole"] = selected_hole
                 result["user_command"] = "fix_hole"
+                result["user_feedback"] = ""
             else:
                 result["ui_message"] = "Invalid ID. Please select a valid hole number."
         else:
@@ -76,10 +78,9 @@ def human_interaction_node(state: AgentState):
         elif user_choice == "3":
             result["user_command"] = "show_list"
         else:
-            result["ui_message"] = (
-            "I could not understand your decision.\n\n"
-            "Please type **approve**, **reject**, or **q**."
-            )
+            result["user_feedback"] = raw_input
+            result["user_command"] = "retry_same_hole"
+            result["ui_message"] = ("I have saved the observation as technical feedback and will re-run the analysis for the same hole.")
         return result
 
     if phase == Phase.RESULT_REVIEW:
@@ -90,10 +91,9 @@ def human_interaction_node(state: AgentState):
         elif user_choice == "3":
             result["user_command"] = "rollback"
         else:
-            result["ui_message"] = (
-            "I could not understand your request.\n\n"
-            "Please type **pick another hole**, **retry**, **rollback**, or **q**."
-        )
+            result["user_feedback"] = raw_input
+            result["user_command"] = "retry_same_hole"
+            result["ui_message"] = ("I have saved the observation as technical feedback and will re-run the analysis for the same hole.")
         return result
     
     # CODE_REVIEW
@@ -107,6 +107,9 @@ def human_interaction_node(state: AgentState):
 
         elif user_choice == "2":
             result["user_command"] = "reject_code"
+            if raw_input.strip().lower() not in ["2", "reject", "regenerate"]:
+                result["user_feedback"] = raw_input
+
             save_negative_experience(
                 state.get("current_hole", {}).get("description", ""),
                 state.get("generated_code", ""),
@@ -122,6 +125,7 @@ def human_interaction_node(state: AgentState):
     return {
     "ui_input": "",
     "user_command": "",
+    "user_feedback": state.get("user_feedback", ""),
     "ui_message": (
         "I could not understand your request.\n\n"
         "Please use one of the suggested options or provide a clearer instruction."

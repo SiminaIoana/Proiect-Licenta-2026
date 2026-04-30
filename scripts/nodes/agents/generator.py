@@ -22,6 +22,8 @@ def generator_node(state: AgentState):
     llm = Settings.llm
     encoding = tiktoken.get_encoding("cl100k_base")
     feedback = state.get("user_feedback", "")
+    if feedback:
+        print(f"[GENERATOR]: Incorporating user feedback into generation: {feedback}")
     plan = state.get("action_plan", "")
     error = state.get("compilation_error", "")
     iterations = state.get("iterations", 0)
@@ -62,7 +64,8 @@ def generator_node(state: AgentState):
             error=error,
             memory_section=memory_section,
             target_code=target_code,
-            specs=specs
+            specs=specs,
+            user_feedback=feedback
         )
     
     # ------ FIX HOLES -----
@@ -72,7 +75,7 @@ def generator_node(state: AgentState):
             index_rejected = get_index("../results/LTM_rejected/", "../DOCS/storage_ltm_rejected/", "Rejected LTM")
 
             if index_rejected:
-                query_engine = index_rejected.as_query_engine(similarity_top_k=2)
+                query_engine = index_rejected.as_query_engine(similarity_top_k=1)
                 rejected_response = query_engine.query(
                 f"What generated code patterns were rejected or caused errors for this plan: {plan}"
                 )
@@ -88,7 +91,8 @@ def generator_node(state: AgentState):
             plan=plan,
             target_code=target_code,
             specs=specs,
-            rejected_memory=rejected_memory
+            rejected_memory=rejected_memory,
+            user_feedback=feedback
             )
     # combine user prompt with system prompt for Groq
     full_prompt = GENERATOR_SYSTEM_PROMPT + "\n\n" + user_prompt

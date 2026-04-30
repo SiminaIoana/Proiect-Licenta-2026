@@ -74,7 +74,7 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
             ui_message += "- **[q]** Finish session."
         else:
             ui_message += "**What would you like to do next?**\n"
-            ui_message += "- **[1]** Pick another coverage hole.\n"
+            ui_message += "- **[1]** Show updated holes list / pick another coverage hole.\n"
             ui_message += "- **[2]** Retry fixing the same hole.\n"
             ui_message += "- **[3]** Rollback to previous code version.\n"
             ui_message += "- **[q]** Quit."

@@ -29,37 +29,7 @@ class sequence_1 extends base_sequence;
 
    task body();
       transaction trans;
-      repeat(100) begin
-         trans=transaction::type_id::create("trans");
-         start_item(trans);
-         trans.randomize with {
-                              re==1;
-                              we==1;
-                                 };
-         finish_item(trans);
-         `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
-      end
-   endtask
-
-endclass
-
-
-
-
-/*-------------------------------------------------------------*/
-/*------------------------SEQUENCE_2---------------------------*/
-/*-------------------------------------------------------------*/
-class sequence_2 extends base_sequence;
-    `uvm_object_utils(sequence_2)
-
-   function new(string name="sequence_2");
-      super.new(name);
-   endfunction
-
-   task body();
-      transaction trans;
-      #20
-      repeat(100) begin
+      repeat(5) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
@@ -69,45 +39,67 @@ class sequence_2 extends base_sequence;
          finish_item(trans);
          `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
       end
-      repeat(150) begin
-         trans=transaction::type_id::create("trans");
-         start_item(trans);
-          trans.randomize with {
-                              re==1;
-                              we==1;
-                                 };
-         finish_item(trans);
-         `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
-      end
    endtask
 
 endclass
 
-class sequence_3 extends base_sequence;
-   `uvm_object_utils(sequence_3)
+// ... (existing content) ...
 
-   function new(string name="sequence_3");
+/*-------------------------------------------------------------*/
+/*---------------------FILL_FIFO_SEQUENCE----------------------*/
+/*-------------------------------------------------------------*/
+class fill_fifo_sequence extends base_sequence;
+   `uvm_object_utils(fill_fifo_sequence)
+
+   function new(string name="fill_fifo_sequence");
       super.new(name);
    endfunction
 
    task body();
       transaction trans;
-      // Cycle through values 0 to 30 to cover all ranges[0] through ranges[9]
-      for (int i = 0; i <= 30; i++) begin
+      repeat(10) begin
          trans = transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
-            re == 1;
-            we == 1;
-            data_in == i;
-         };
+                              re == 0;
+                              we == 1;
+                             };
          finish_item(trans);
-         `uvm_info("SEQUENCE_3", $sformatf("Sent data_in = %0d", i), UVM_NONE);
+         `uvm_info("FILL_FIFO_SEQ", "Write transaction completed", UVM_NONE);
       end
    endtask
+
+endclass
+
+/*-------------------------------------------------------------*/
+/*---------------------DATA_RANGE_SEQUENCE---------------------*/
+/*-------------------------------------------------------------*/
+class data_range_sequence extends base_sequence;
+   `uvm_object_utils(data_range_sequence)
+
+   function new(string name="data_range_sequence");
+      super.new(name);
+   endfunction
+
+   task body();
+      transaction trans;
+      repeat(30) begin
+         trans = transaction::type_id::create("trans");
+         start_item(trans);
+         trans.randomize with {
+                              re == 0;
+                              we == 1;
+                              data_in inside {[0:30]};
+                             };
+         finish_item(trans);
+         `uvm_info("DATA_RANGE_SEQ", "Write transaction with data_in in [0:30]", UVM_NONE);
+      end
+   endtask
+
 endclass
 
 `endif
+
 
 
 

@@ -205,6 +205,7 @@ def build_and_run():
         "coverage_holes":"",
         "iteration_tokens": 0,
         "user_command":"",
+        "user_feedback":"",
         "coverage_value":0.0,
         "previous_coverage":0.0,
         "phase": Phase.INIT,

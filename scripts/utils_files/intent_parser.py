@@ -91,34 +91,105 @@ def normalize_user_input(user_input: str, phase: Phase) -> str:
     text = user_input.strip().lower()
     if not text:
         return ""
+
     # global exit commands
-    if any(word in text for word in ["quit", "exit", "stop"]) or text == "q":
+    if text == "q" or any(phrase in text for phrase in ["quit", "exit", "stop", "end session"]):
         return "q"
 
-    # SELECT_HOLE: numbers mean hole IDs
+    show_holes_phrases = [
+        "pick another hole",
+        "choose another hole",
+        "select another hole",
+        "another hole",
+        "different hole",
+        "go back to holes",
+        "back to holes",
+        "holes list",
+        "show holes",
+        "show list",
+        "see holes",
+        "current holes",
+        "updated holes",
+        "list of holes"
+    ]
+
+    approve_phrases = [
+        "approve",
+        "accept",
+        "continue",
+        "yes",
+        "ok",
+        "go ahead",
+        "do it",
+        "proceed",
+        "i like the plan",
+        "i approve",
+        "approve the plan"
+    ]
+
+    retry_phrases = [
+        "reject",
+        "regenerate",
+        "retry",
+        "try again",
+        "new solution",
+        "another approach",
+        "different solution",
+        "regenerate plan"
+    ]
+
+    rollback_phrases = [
+        "rollback",
+        "revert",
+        "undo",
+        "restore",
+        "previous code"
+    ]
+
+    # SELECT_HOLE: numbers are hole IDs
     if phase == Phase.SELECT_HOLE:
         if text.isdigit():
             return text
 
-        if any(word in text for word in ["list", "refresh", "reanalyze", "holes"]):
+        if any(phrase in text for phrase in show_holes_phrases) or any(word in text for word in ["list", "refresh", "reanalyze", "holes"]):
             return "show_list"
 
+        return ""
 
-    # PLAN_REVIEW / CODE_REVIEW / RESULT_REVIEW
-    if phase in [Phase.PLAN_REVIEW, Phase.CODE_REVIEW, Phase.RESULT_REVIEW]:
+    # PLAN_REVIEW
+    if phase == Phase.PLAN_REVIEW:
+        if any(phrase in text for phrase in show_holes_phrases) or text == "3":
+            return "3"
 
-        if any(word in text for word in ["approve", "accept", "continue", "yes", "ok", "go ahead"]) or text == "1":
+        if any(phrase in text for phrase in approve_phrases) or text == "1":
             return "1"
 
-        if any(word in text for word in ["reject", "regenerate", "retry", "try again", "new solution", "no", "another approach", "different solution"]) or text == "2":
+        if any(phrase in text for phrase in retry_phrases) or text == "2":
             return "2"
 
-        if phase == Phase.RESULT_REVIEW:
-            if any(word in text for word in ["rollback", "revert", "undo", "restore"]) or text == "3":
-                return "3"
-            
+    # RESULT_REVIEW
+    if phase == Phase.RESULT_REVIEW:
+        if any(phrase in text for phrase in show_holes_phrases) or text == "1":
+            return "1"
+
+        if any(phrase in text for phrase in retry_phrases) or text == "2":
+            return "2"
+
+        if any(phrase in text for phrase in rollback_phrases) or text == "3":
+            return "3"
+
+    # CODE_REVIEW
+    if phase == Phase.CODE_REVIEW:
+        if any(phrase in text for phrase in approve_phrases) or text == "1":
+            return "1"
+
+        if any(phrase in text for phrase in retry_phrases) or text == "2":
+            return "2"
+
     intent = llm_intent_classifier(user_input, phase)
     mapped_choice = map_intent_to_choice(intent, phase)
+
     if mapped_choice:
         return mapped_choice
+
     return ""

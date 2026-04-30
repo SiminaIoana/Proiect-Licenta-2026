@@ -16,41 +16,53 @@ def extract_coverage_holes(path: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-    holes = []
+    holes_dict = {}
 
-    # Găsește toate secțiunile "Uncovered bins" și asociază-le cu variabila
-    # Împarte conținutul în blocuri per Cover Point Table
     table_pattern = re.compile(
-        r'Cover (?:Point|Cross Cover Point) Table for Inst.*?Variable\s*:,?\s*(\w+)(.*?)(?=Cover (?:Point|Cross Cover Point) Table|$)',
+        r'(?:Cover Point Table|Cross Cover Point Table) for Inst\s*:.*?Variable\s*:,?\s*(\w+)(.*?)(?=(?:Cover Point Table|Cross Cover Point Table) for Inst|$)',
         re.DOTALL
     )
 
     for match in table_pattern.finditer(content):
-        variable = match.group(1)
+        variable = match.group(1).strip()
         block = match.group(2)
 
         uncov_match = re.search(
-            r'Uncovered bins\s*\n(.*?)(?:Covered bins|$)',
-            block, re.DOTALL
+            r'(?:Uncovered bins|User Uncovered bins)\s*\n(.*?)(?:Covered bins|User Covered bins|$)',
+            block,
+            re.DOTALL
         )
+
         if not uncov_match:
             continue
 
         uncov_section = uncov_match.group(1)
-        bin_names = re.findall(r'^\s+([\w\[\]]+)\s+,0\s+,', uncov_section, re.MULTILINE)
-        
+
+        bin_names = re.findall(
+            r'^\s*([\w\[\]]+)\s*,\s*0\s*,',
+            uncov_section,
+            re.MULTILINE
+        )
+
         bin_names = list(dict.fromkeys(bin_names))
 
         if bin_names:
-            holes.append(
-                f"- coverpoint '{variable}': bins not covered: {', '.join(bin_names)}"
-            )
+            if variable not in holes_dict:
+                holes_dict[variable] = []
 
-    if not holes:
+            for b in bin_names:
+                if b not in holes_dict[variable]:
+                    holes_dict[variable].append(b)
+
+    if not holes_dict:
         return "No obvious coverage holes found in text report."
 
-    return "\n".join(holes)
+    holes = [
+        f"- coverpoint '{var}': bins not covered: {', '.join(bins)}"
+        for var, bins in holes_dict.items()
+    ]
 
+    return "\n".join(holes)
 
 # ==============================================================
 # ------ FUNCTION FOR EXTRACTING PERCENTAGE FROM FCOV -------

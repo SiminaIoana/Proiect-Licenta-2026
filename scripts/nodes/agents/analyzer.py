@@ -119,6 +119,9 @@ def root_cause_analysis(state: AgentState):
     sim_log = read_simulation_log(state.get("simulation_log_path", ""))
 
     specs = state.get("dut_specs", "")
+    user_feedback = state.get("user_feedback", "")
+    if user_feedback:
+        print(f"[ANALYZER]: Incorporating user feedback into analysis: {user_feedback}")
     run_script = read_run_script(PROJECT_CONFIG.get("bat_file_path", ""))
 
     sim_log_filtered = filter_log_for_hole(sim_log, hole_description)
@@ -153,7 +156,8 @@ def root_cause_analysis(state: AgentState):
     env_code=env_code,
     run_script=run_script,
     specs=specs,
-    past_experience=memory_section
+    past_experience=memory_section,
+    user_feedback=user_feedback
 )
 
     # Combinăm System Prompt cu User Prompt

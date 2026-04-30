@@ -33,6 +33,7 @@ class AgentState(TypedDict):
     status:                     Status             # FAILED, SUCCESS, PROCESSING
     phase:                      Phase              # current phase of the process
     user_command:               str             # user interaction 
+    user_feedback:              str             # user feedback after fix implementation
     
 
     # -- TLM for analyzer agent --

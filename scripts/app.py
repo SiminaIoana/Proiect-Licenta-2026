@@ -156,6 +156,7 @@ if should_run:
                         "root_cause_hole": "",
                         "action_plan": "",
                         "generated_code": "",
+                        "iteration_tokens": 0,
                         "compilation_error": "",
                         "coverage_holes": "",
                         "fcov_report_path": "",
@@ -179,16 +180,15 @@ if should_run:
             except Exception as e:
                 status.update(label="Error detected!", state="error")
                 
-                # --- ASTA O SĂ VEZI ÎN TERMINAL (CMD) ---
                 print("\n" + "="*60)
                 print("DETALII EROARE PENTRU TERMINAL:")
                 print(traceback.format_exc()) 
                 print("="*60 + "\n")
                 # ---------------------------------------
 
-                st.error(f"⚠️ **Eroare Orchestrator:** {str(e)}")
+                st.error(f" **Eroare Orchestrator:** {str(e)}")
                 
-                with st.expander("📂 Vezi detalii eroare (Traceback)", expanded=True):
+                with st.expander(" Vezi detalii eroare (Traceback)", expanded=True):
                     st.code(traceback.format_exc(), language="python")
                 
                 st.stop()
