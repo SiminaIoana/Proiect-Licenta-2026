@@ -198,7 +198,19 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
-   
+    # ============================================================
+    # ---------------- COVERAGE HOLES RAW VIEW -------------------
+    # ============================================================
+    coverage_holes = st.session_state.state.get("coverage_holes", "")
+
+    st.divider()
+    st.subheader("Coverage Holes")
+
+    if coverage_holes:
+        st.markdown("**Raw analyzer extraction:**")
+        st.code(coverage_holes, language="text")
+    else:
+        st.caption("No coverage holes extracted yet.")
 
     # ============================================================
     # ---------------- CURRENT HOLES LIST ------------------------
