@@ -23,6 +23,16 @@ def phase_controller_node(state: AgentState):
     status = state.get("status", Status.PROCESSING)
     cmd = state.get("user_command", "").strip().lower()
 
+    # ------------------------------------------------------------
+    # GLOBAL QUIT
+    # ------------------------------------------------------------
+    if cmd in ["quit", "q", "exit", "stop"]:
+        print("[PHASE CONTROLLER]: Quit requested. Ending flow.")
+        return {
+            "phase": Phase.DONE,
+            "user_command": ""
+        }
+
     next_phase = phase
 
     if phase == Phase.INIT:
@@ -42,35 +52,30 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.RESULT_REVIEW
         else:
             next_phase = Phase.SELECT_HOLE
-    
+
     elif phase == Phase.SELECT_HOLE:
         if cmd == "fix_hole":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
-        elif cmd in ["quit", "q"]:
-            next_phase = Phase.DONE
 
     elif phase == Phase.ROOT_CAUSE_ANALYSIS:
         next_phase = Phase.PLAN_REVIEW
 
     elif phase == Phase.COMPARE_RESULTS:
         next_phase = Phase.RESULT_REVIEW
-    
-    elif phase == Phase.RESULT_REVIEW:
-        coverage = state.get("coverage_value", 0.0)
-        holes = state.get("holes_list", [])
 
-        if cmd in ["quit", "q"]:
-            next_phase = Phase.DONE
-        elif cmd == "show_list":
-            next_phase = Phase.SELECT_HOLE
+    elif phase == Phase.RESULT_REVIEW:
+        if cmd == "show_list":
+            next_phase = Phase.BUILD_HOLES_LIST
         elif cmd == "retry_same_hole":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "rollback":
             next_phase = Phase.ROLLBACK
 
     elif phase == Phase.ERROR_ANALYSIS:
+        # For now, no full automatic error repair.
+        # Show the failure/recommended rollback through PLAN_REVIEW or RESULT_REVIEW depending on your UI.
         next_phase = Phase.PLAN_REVIEW
 
     elif phase == Phase.PLAN_REVIEW:
@@ -80,19 +85,19 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
-        elif cmd in ["quit", "q"]:
-            next_phase = Phase.DONE
+        elif cmd == "rollback":
+            next_phase = Phase.ROLLBACK
 
     elif phase == Phase.CODE_GENERATION:
         next_phase = Phase.CODE_REVIEW
-        
+
     elif phase == Phase.CODE_REVIEW:
         if cmd == "approve_code":
             next_phase = Phase.RUN_AFTER_FIX
         elif cmd == "reject_code":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
-        elif cmd in ["quit", "q"]:
-            next_phase = Phase.DONE
+        elif cmd == "show_list":
+            next_phase = Phase.BUILD_HOLES_LIST
 
     elif phase == Phase.ROLLBACK:
         next_phase = Phase.RUN_CHECKER

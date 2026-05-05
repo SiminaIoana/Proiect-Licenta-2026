@@ -33,7 +33,16 @@ def rag_node(state: AgentState):
      """
      dynamic_response = index_dynamic.as_query_engine().query(dynamic_query)
 
-     static_query = "Provide the syntax rules and a template for a UVM subscriber implementing functional coverage with a covergroup."
+     static_query = """
+Provide concise UVM/SystemVerilog rules for implementing functional coverage
+inside a uvm_subscriber#(transaction), including:
+- covergroup declaration and construction,
+- write(transaction t) sampling,
+- coverpoints and bins,
+- cross coverage,
+- common mistakes in generated UVM code,
+- Vivado-compatible SystemVerilog syntax.
+"""
      static_response = index_static.as_query_engine().query(static_query)
 
      rag_tokens = token_counter.total_llm_token_count

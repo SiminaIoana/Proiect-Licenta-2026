@@ -18,6 +18,13 @@ CURRENT ENVIRONMENT, RTL, AND RUN SCRIPT:
 DUT SPECIFICATIONS:
 {specs}
 
+UVM / SYSTEMVERILOG COVERAGE RULES FROM RAG:
+{uvm_rules}
+
+Use these rules to keep the generated code compatible with UVM subscriber-based functional coverage, covergroups, bins, crosses, sequences, tests, and Vivado xsim execution.
+If these generic rules conflict with the actual project code, follow the actual project code.
+
+
 PREVIOUS REJECTED OR FAILED SOLUTIONS:
 {rejected_memory}
 
@@ -54,6 +61,12 @@ PLAN COMPLIANCE RULE:
 - If the Analyzer chose COVERGROUP_FIX, RTL_BUG, or MONITOR_OR_DRIVER_TIMING_ERROR, do not invent unrelated stimulus. If the requested change can only be done by modifying existing internal code, provide the closest safe generated output only if it still directly addresses the Analyzer's root cause.
 - Do NOT create unrelated tests or unrelated files.
 - The generated test name must exactly match the UVM_TESTNAME used in MakeSVfile.bat.
+
+USER NUMERIC REQUIREMENT RULE:
+- If the Analyzer plan or user feedback contains an explicit numeric requirement the generated code MUST implement that number or a larger legal value.
+- Do NOT reduce an explicit user-requested count to the theoretical minimum.
+- If the plan says “more than 10 packets”, use at least 11 transactions.
+- If the plan says “FIFO depth + 5”, compute the count from the known FIFO depth if available; otherwise use a safe literal margin and explain only in code comments.
 
 STYLE RULE:
 Prefer the simplest maintainable solution.
@@ -94,9 +107,10 @@ STATE / FLAG / CONDITION STIMULUS RULES:
 - Generate a small legal margin of additional transactions so the target condition can become stable and be sampled by monitor/coverage.
 - Respect protocol legality and DUT constraints.
 - If the Analyzer or user feedback requests a concrete safe margin, follow it.
+- If user_feedback or the Analyzer plan contains an explicit numeric requirement, the generated code MUST implement that number or a larger safe legal value. Do not reduce user-requested counts to the theoretical minimum. 
 
 RUN SCRIPT / VIVADO RULES:
-- The project uses Vivado, NOT ModelSim/Questa.
+- The project uses Vivado
 - NEVER use vlog.
 - NEVER use vsim.
 - Use only Vivado-style xsim commands already present in the run script.
@@ -143,6 +157,13 @@ CURRENT ENVIRONMENT, RTL, AND RUN SCRIPT:
 
 DUT SPECIFICATIONS:
 {specs}
+
+UVM / SYSTEMVERILOG COVERAGE RULES FROM RAG:
+{uvm_rules}
+
+Use these rules to keep the generated code compatible with UVM subscriber-based functional coverage, covergroups, bins, crosses, sequences, tests, and Vivado xsim execution.
+If these generic rules conflict with the actual project code, follow the actual project code.
+
 
 USER / VERIFICATION ENGINEER FEEDBACK:
 {user_feedback}

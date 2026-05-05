@@ -16,16 +16,36 @@ def extract_coverage_holes(path: str) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-    holes_dict = {}
+    holes = {}
 
+    def add_hole(kind: str, name: str, bins):
+        key = (kind, name)
+
+        if isinstance(bins, str):
+            bins = [bins]
+
+        if key not in holes:
+            holes[key] = []
+
+        for b in bins:
+            b = str(b).strip()
+            if b and b not in holes[key]:
+                holes[key].append(b)
+
+    # ------------------------------------------------------------
+    # 1. Parse detailed Cover Point / Cross Cover Point tables
+    # ------------------------------------------------------------
     table_pattern = re.compile(
-        r'(?:Cover Point Table|Cross Cover Point Table) for Inst\s*:.*?Variable\s*:,?\s*(\w+)(.*?)(?=(?:Cover Point Table|Cross Cover Point Table) for Inst|$)',
+        r'(?P<table_type>Cover Point Table|Cross Cover Point Table)\s+for Inst\s*:.*?Variable\s*:,?\s*(?P<var>[\w]+)(?P<body>.*?)(?=(?:Cover Point Table|Cross Cover Point Table)\s+for Inst|$)',
         re.DOTALL
     )
 
     for match in table_pattern.finditer(content):
-        variable = match.group(1).strip()
-        block = match.group(2)
+        table_type = match.group("table_type")
+        variable = match.group("var").strip()
+        block = match.group("body")
+
+        kind = "cross" if table_type.startswith("Cross") else "coverpoint"
 
         uncov_match = re.search(
             r'(?:Uncovered bins|User Uncovered bins)\s*\n(.*?)(?:Covered bins|User Covered bins|$)',
@@ -44,25 +64,90 @@ def extract_coverage_holes(path: str) -> str:
             re.MULTILINE
         )
 
+        # Remove duplicates while preserving order
         bin_names = list(dict.fromkeys(bin_names))
 
         if bin_names:
-            if variable not in holes_dict:
-                holes_dict[variable] = []
+            add_hole(kind, variable, bin_names)
 
-            for b in bin_names:
-                if b not in holes_dict[variable]:
-                    holes_dict[variable].append(b)
+    # ------------------------------------------------------------
+    # 2. Parse Cover Point Details summary as fallback
+    # ------------------------------------------------------------
+    cp_summary_match = re.search(
+        r'Instance\s+.*?Cover Point Details\s*(.*?)\n\s*Instance\s+.*?Cross Cover Point Details',
+        content,
+        re.DOTALL
+    )
 
-    if not holes_dict:
+    if cp_summary_match:
+        cp_summary = cp_summary_match.group(1)
+
+        for line in cp_summary.splitlines():
+            line = line.strip()
+            if not line or line.startswith("Name") or line.startswith("TableTag"):
+                continue
+
+            # Example:
+            # re_cp ,tabletag,2 ,1 ,1 ,50 ...
+            m = re.match(
+                r'^(\w+)\s*,.*?,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)',
+                line
+            )
+
+            if not m:
+                continue
+
+            name = m.group(1)
+            uncovered = int(m.group(3))
+
+            if uncovered > 0 and ("coverpoint", name) not in holes:
+                add_hole("coverpoint", name, f"{uncovered} bins not covered")
+
+    # ------------------------------------------------------------
+    # 3. Parse Cross Cover Point Details summary as fallback
+    # ------------------------------------------------------------
+    cross_summary_match = re.search(
+        r'Instance\s+.*?Cross Cover Point Details\s*(.*?)(?=::::::::::::::::|CoverPoint Tables|$)',
+        content,
+        re.DOTALL
+    )
+
+    if cross_summary_match:
+        cross_summary = cross_summary_match.group(1)
+
+        for line in cross_summary.splitlines():
+            line = line.strip()
+            if not line or line.startswith("Name") or line.startswith("TableTag"):
+                continue
+
+            # Example:
+            # read_protocol_cross ,tabletag,2 ,2 ,0 ,0 ...
+            m = re.match(
+                r'^(\w+)\s*,.*?,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)',
+                line
+            )
+
+            if not m:
+                continue
+
+            name = m.group(1)
+            uncovered = int(m.group(3))
+
+            if uncovered > 0 and ("cross", name) not in holes:
+                add_hole("cross", name, f"{uncovered} bins not covered")
+
+    if not holes:
         return "No obvious coverage holes found in text report."
 
-    holes = [
-        f"- coverpoint '{var}': bins not covered: {', '.join(bins)}"
-        for var, bins in holes_dict.items()
-    ]
+    output = []
 
-    return "\n".join(holes)
+    for (kind, name), bins in holes.items():
+        if len(bins) == 1 and "bins not covered" in bins[0]:
+            output.append(f"- {kind} '{name}': {bins[0]}")
+        else:
+            output.append(f"- {kind} '{name}': bins not covered: {', '.join(bins)}")
+
+    return "\n".join(output)
 
 # ==============================================================
 # ------ FUNCTION FOR EXTRACTING PERCENTAGE FROM FCOV -------

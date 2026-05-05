@@ -120,6 +120,9 @@ def root_cause_analysis(state: AgentState):
 
     specs = state.get("dut_specs", "")
     user_feedback = state.get("user_feedback", "")
+    print(f"[DEBUG ANALYZER] user_feedback='{user_feedback}'")
+    uvm_rules = state.get("uvm_rules", "")
+
     if user_feedback:
         print(f"[ANALYZER]: Incorporating user feedback into analysis: {user_feedback}")
     run_script = read_run_script(PROJECT_CONFIG.get("bat_file_path", ""))
@@ -156,6 +159,7 @@ def root_cause_analysis(state: AgentState):
     env_code=env_code,
     run_script=run_script,
     specs=specs,
+    uvm_rules=uvm_rules,
     past_experience=memory_section,
     user_feedback=user_feedback
 )

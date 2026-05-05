@@ -43,56 +43,39 @@ class sequence_1 extends base_sequence;
 
 endclass
 
-// ... (existing content) ...
-
 /*-------------------------------------------------------------*/
-/*---------------------FILL_FIFO_SEQUENCE----------------------*/
+/*-------------------------SEQUENCE_2--------------------------*/
 /*-------------------------------------------------------------*/
-class fill_fifo_sequence extends base_sequence;
-   `uvm_object_utils(fill_fifo_sequence)
+class sequence_2 extends base_sequence;
+   `uvm_object_utils(sequence_2)
 
-   function new(string name="fill_fifo_sequence");
+   function new(string name="sequence_2");
       super.new(name);
    endfunction
 
    task body();
       transaction trans;
-      repeat(10) begin
-         trans = transaction::type_id::create("trans");
+      // Fill FIFO with 8 writes
+      repeat(8) begin
+         trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
-                              re == 0;
-                              we == 1;
-                             };
+                              re==0;
+                              we==1;
+                                 };
          finish_item(trans);
-         `uvm_info("FILL_FIFO_SEQ", "Write transaction completed", UVM_NONE);
+         `uvm_info("SEQUENCE_2_WRITE","",UVM_NONE);
       end
-   endtask
-
-endclass
-
-/*-------------------------------------------------------------*/
-/*---------------------DATA_RANGE_SEQUENCE---------------------*/
-/*-------------------------------------------------------------*/
-class data_range_sequence extends base_sequence;
-   `uvm_object_utils(data_range_sequence)
-
-   function new(string name="data_range_sequence");
-      super.new(name);
-   endfunction
-
-   task body();
-      transaction trans;
-      repeat(30) begin
-         trans = transaction::type_id::create("trans");
+      // Perform 8 reads
+      repeat(8) begin
+         trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
-                              re == 0;
-                              we == 1;
-                              data_in inside {[0:30]};
-                             };
+                              re==1;
+                              we==0;
+                                 };
          finish_item(trans);
-         `uvm_info("DATA_RANGE_SEQ", "Write transaction with data_in in [0:30]", UVM_NONE);
+         `uvm_info("SEQUENCE_2_READ","",UVM_NONE);
       end
    endtask
 

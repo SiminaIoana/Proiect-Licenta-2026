@@ -28,6 +28,7 @@ def generator_node(state: AgentState):
     error = state.get("compilation_error", "")
     iterations = state.get("iterations", 0)
     specs = state.get("dut_specs", "")
+    uvm_rules = state.get("uvm_rules", "")
     user_command = state.get("user_command", "")
     target_file = state.get("target_file", "unknown_file.sv")
 
@@ -64,6 +65,7 @@ def generator_node(state: AgentState):
             error=error,
             memory_section=memory_section,
             target_code=target_code,
+            uvm_rules=uvm_rules,
             specs=specs,
             user_feedback=feedback
         )
@@ -92,7 +94,8 @@ def generator_node(state: AgentState):
             target_code=target_code,
             specs=specs,
             rejected_memory=rejected_memory,
-            user_feedback=feedback
+            user_feedback=feedback,
+            uvm_rules=uvm_rules,
             )
     # combine user prompt with system prompt for Groq
     full_prompt = GENERATOR_SYSTEM_PROMPT + "\n\n" + user_prompt
