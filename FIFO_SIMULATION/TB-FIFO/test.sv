@@ -51,13 +51,13 @@ class test_case_1 extends base_test;
 endclass
 
 /*-------------------------------------------------------------*/
-/*---------------------TEST CASE 2-----------------------------*/
+/*------------------------TEST_FULL----------------------------*/
 /*-------------------------------------------------------------*/
-class test_case_2 extends base_test;
-   `uvm_component_utils(test_case_2)
+class test_full extends base_test;
+   `uvm_component_utils(test_full)
 
 
-   function new(string name="test_case_2",uvm_component parent=null);
+   function new(string name="test_full",uvm_component parent=null);
       super.new(name,parent);
    endfunction
 
@@ -66,10 +66,10 @@ class test_case_2 extends base_test;
    endfunction
 
    task run_phase(uvm_phase phase);
-      sequence_2 sequence_h;
+      sequence_full sequence_h;
       phase.raise_objection(this);
-      sequence_h=sequence_2::type_id::create("sequence_h",this);
-      `uvm_info("TEST_SEQUENCE_STARTED","",UVM_NONE);
+      sequence_h=sequence_full::type_id::create("sequence_h",this);
+      `uvm_info("TEST_FULL_SEQUENCE_STARTED","",UVM_NONE);
       sequence_h.start(environment_h.agent_h.sequencer_h);
       phase.drop_objection(this);
    endtask

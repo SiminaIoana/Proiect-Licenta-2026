@@ -34,8 +34,7 @@ def rag_node(state: AgentState):
      dynamic_response = index_dynamic.as_query_engine().query(dynamic_query)
 
      static_query = """
-Provide concise UVM/SystemVerilog rules for implementing functional coverage
-inside a uvm_subscriber#(transaction), including:
+Provide concise UVM/SystemVerilog rules for implementing functional coverage inside a uvm_subscriber#(transaction), including:
 - covergroup declaration and construction,
 - write(transaction t) sampling,
 - coverpoints and bins,

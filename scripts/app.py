@@ -154,12 +154,14 @@ with st.sidebar:
     if st.button("Clear Chat", use_container_width=True):
         # Clear only the conversation.
         # Keep current coverage, holes, current phase and analysis state.
+        reset_workflow_state("Starting analysis...")
         st.session_state.chat_history = [
             {
                 "role": "assistant",
-                "content": "Chat cleared. Current analysis state was preserved."
+                "content": "Chat cleared. Please press **Start Analysis** to run the workflow again."
             }
         ]
+        st.session_state.run_graph = False
         st.rerun()
 
     st.divider()

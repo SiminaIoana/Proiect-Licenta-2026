@@ -44,19 +44,18 @@ class sequence_1 extends base_sequence;
 endclass
 
 /*-------------------------------------------------------------*/
-/*-------------------------SEQUENCE_2--------------------------*/
+/*------------------------SEQUENCE_FULL------------------------*/
 /*-------------------------------------------------------------*/
-class sequence_2 extends base_sequence;
-   `uvm_object_utils(sequence_2)
+class sequence_full extends base_sequence;
+   `uvm_object_utils(sequence_full)
 
-   function new(string name="sequence_2");
+   function new(string name="sequence_full");
       super.new(name);
    endfunction
 
    task body();
       transaction trans;
-      // Fill FIFO with 8 writes
-      repeat(8) begin
+      repeat(9) begin
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
@@ -64,18 +63,7 @@ class sequence_2 extends base_sequence;
                               we==1;
                                  };
          finish_item(trans);
-         `uvm_info("SEQUENCE_2_WRITE","",UVM_NONE);
-      end
-      // Perform 8 reads
-      repeat(8) begin
-         trans=transaction::type_id::create("trans");
-         start_item(trans);
-         trans.randomize with {
-                              re==1;
-                              we==0;
-                                 };
-         finish_item(trans);
-         `uvm_info("SEQUENCE_2_READ","",UVM_NONE);
+         `uvm_info("SEQUENCE_FULL_TRANSACTION_COUNT","",UVM_NONE);
       end
    endtask
 

@@ -52,8 +52,6 @@ def llm_intent_classifier(user_input: str, phase: Phase) -> str:
     return "unknown"
 
 
-
-
 def map_intent_to_choice(intent: str, phase: Phase) -> str:
     if intent == "quit":
         return "q"
@@ -146,7 +144,7 @@ def normalize_user_input(user_input: str, phase: Phase) -> str:
         "previous code"
     ]
 
-    # SELECT_HOLE: numbers are hole IDs
+    # SELECT_HOLE
     if phase == Phase.SELECT_HOLE:
         if text.isdigit():
             return text

@@ -38,8 +38,6 @@ def has_concept_pair(text: str, verbs: list[str], objects: list[str]) -> bool:
     """
     Detects intent by checking if the user used both an action verb
     and a relevant object.
-
-    Example:
     - "generate the code please" -> generate + code
     - "show me the implementation" -> show + implementation
     - "run vivado" -> run + vivado
@@ -192,8 +190,6 @@ def human_interaction_node(state: AgentState):
 
     # ------------------------------------------------------------
     # GLOBAL QUIT
-    # Works for:
-    # q, Q, quit, exit, stop, "q and restart", "please quit"
     # ------------------------------------------------------------
     if has_word(raw_text, ["q", "quit", "exit", "stop"]):
         result["user_command"] = "quit"
@@ -202,7 +198,6 @@ def human_interaction_node(state: AgentState):
 
     # ------------------------------------------------------------
     # ERROR / FAILED PLAN REVIEW
-    # For now: no automatic error repair. Prefer rollback.
     # ------------------------------------------------------------
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:
         rollback_request = (
