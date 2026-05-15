@@ -5,6 +5,7 @@ from utils_files.injection import create_rollback_checkpoint, inject_generated_c
 from utils_files.memory import save_negative_experience
 from utils_files.phases import Phase
 from utils_files.status import Status
+from llama_index.core import Settings
 
 
 # ==========================================
@@ -38,6 +39,8 @@ def has_concept_pair(text: str, verbs: list[str], objects: list[str]) -> bool:
     """
     Detects intent by checking if the user used both an action verb
     and a relevant object.
+
+    Examples:
     - "generate the code please" -> generate + code
     - "show me the implementation" -> show + implementation
     - "run vivado" -> run + vivado
@@ -59,6 +62,11 @@ def strip_feedback_prefix(text: str) -> str:
         "comment:",
         "observation:",
         "idea:",
+        "feedback",
+        "suggestion",
+        "comment",
+        "observation",
+        "idea",
     ]
 
     raw_lower = raw.lower()
@@ -73,10 +81,6 @@ def strip_feedback_prefix(text: str) -> str:
 def has_negative_or_correction_intent(text: str) -> bool:
     """
     Detects when the user is not approving, but correcting or restricting.
-    Example:
-    - "do not generate complicated code"
-    - "ok but change the sequence"
-    - "don't modify constraints"
     """
     return contains_any(
         text,
@@ -107,18 +111,17 @@ def is_feedback_like(text: str) -> bool:
     return contains_any(
         text,
         [
-            "feedback:",
-            "suggestion:",
-            "comment:",
-            "observation:",
-            "idea:",
+            "feedback",
+            "suggestion",
+            "comment",
+            "observation",
+            "idea",
             "maybe",
             "i think",
             "i believe",
             "you should",
             "should",
             "try to",
-            "try",
             "instead",
             "do not",
             "don't",
@@ -150,8 +153,50 @@ def is_feedback_like(text: str) -> bool:
             "packets",
             "writes",
             "reads",
+            "existing test",
+            "existing sequence",
+            "current test",
+            "current sequence",
         ]
     )
+
+
+def generate_feedback_acknowledgement(raw_text: str, phase: Phase) -> str:
+    """
+    Uses the LLM only to generate a short natural acknowledgement.
+    It does not decide routing and does not generate a plan.
+    """
+    try:
+        llm = Settings.llm
+
+        prompt = f"""
+You are an AI verification assistant.
+
+The user provided feedback during a review step.
+
+USER FEEDBACK:
+{raw_text}
+
+Write a short acknowledgement message, maximum 2 sentences.
+
+Rules:
+- Acknowledge what the user wants.
+- Say that you will revise the plan/code accordingly if it is technically valid.
+- Do not generate code.
+- Do not generate a new action plan.
+- Do not claim that the change is already done.
+- Do not mention internal phases or implementation details.
+"""
+
+        response = llm.complete(prompt)
+        return response.text.strip()
+
+    except Exception as e:
+        print(f"[HUMAN WARNING] Feedback acknowledgement generation failed: {e}")
+        return (
+            "I understand your feedback. I will take it into account and revise the "
+            "plan or code if it is technically valid."
+        )
 
 
 # ==========================================
@@ -208,12 +253,14 @@ def human_interaction_node(state: AgentState):
         if rollback_request:
             result["user_command"] = "rollback"
             result["user_feedback"] = ""
+
             if state.get("generated_code"):
                 save_negative_experience(
-                state.get("current_hole", {}).get("description", ""),
-                state.get("generated_code", ""),
-                errors or "User requested rollback after Vivado error."
-            )
+                    state.get("current_hole", {}).get("description", ""),
+                    state.get("generated_code", ""),
+                    errors or "User requested rollback after Vivado error."
+                )
+
         else:
             result["ui_message"] = (
                 "The generated code caused a Vivado error.\n\n"
@@ -353,16 +400,18 @@ def human_interaction_node(state: AgentState):
         # free text becomes technical feedback for the analyzer.
         feedback = strip_feedback_prefix(raw_text)
         result["user_feedback"] = feedback
-        result["user_command"] = "retry_same_hole"
-        result["ui_message"] = (
-            "I have saved the observation as technical feedback and will re-run "
-            "the analysis for the same hole."
-        )
+        result["user_command"] = "refine_plan"
+
+        # Natural acknowledgement for the user.
+        result["ui_message"] = generate_feedback_acknowledgement(raw_text, phase)
 
         print(f"[DEBUG HUMAN PLAN_REVIEW] SAVING FEEDBACK='{result['user_feedback']}'")
         return result
 
     # ------------------------------------------------------------
+    # CODE_REVIEW
+    # ------------------------------------------------------------
+        # ------------------------------------------------------------
     # CODE_REVIEW
     # ------------------------------------------------------------
     if phase == Phase.CODE_REVIEW:
@@ -419,6 +468,54 @@ def human_interaction_node(state: AgentState):
             )
         )
 
+        simple_reject = raw_lower in [
+            "2",
+            "reject",
+            "regenerate",
+            "retry",
+            "try again",
+        ]
+
+        plan_level_feedback = contains_any(
+            raw_text,
+            [
+                "target file",
+                "wrong file",
+                "file is wrong",
+                "there is no",
+                "does not exist",
+                "only",
+                "do not create",
+                "don't create",
+                "dont create",
+                "do not modify",
+                "don't modify",
+                "dont modify",
+                "no new sequence",
+                "no new test",
+                "strategy",
+                "chosen strategy",
+                "code_action",
+                "target_files",
+                "coverpoint",
+                "cover point",
+                "bins",
+                "bin ",
+                "ranges",
+                "coverage model",
+                "subscriber",
+                "sequence.sv",
+                "test.sv",
+                "makefile",
+                "make sv",
+                "run script",
+                "replace_class",
+                "replace_coverpoint",
+                "replace marker",
+                "scope",
+            ]
+        )
+
         if approve_request:
             result["user_command"] = "approve_code"
             result["user_feedback"] = ""
@@ -430,21 +527,12 @@ def human_interaction_node(state: AgentState):
             inject_generated_code(state)
             return result
 
-        if reject_request or feedback_like or negative_intent:
+        if simple_reject:
             result["user_command"] = "reject_code"
-
-            simple_reject = raw_lower in [
-                "2",
-                "reject",
-                "regenerate",
-                "retry",
-                "try again",
-            ]
-
-            if simple_reject:
-                result["user_feedback"] = state.get("user_feedback", "")
-            else:
-                result["user_feedback"] = strip_feedback_prefix(raw_text)
+            result["user_feedback"] = state.get("user_feedback", "")
+            result["ui_message"] = (
+                "I understand. I will regenerate the code using the current plan."
+            )
 
             save_negative_experience(
                 state.get("current_hole", {}).get("description", ""),
@@ -452,9 +540,30 @@ def human_interaction_node(state: AgentState):
                 raw_text
             )
 
-            result["ui_message"] = (
-                "I saved your feedback and will regenerate/reanalyze the solution."
+            return result
+
+        if reject_request or feedback_like or negative_intent or plan_level_feedback:
+            result["user_feedback"] = strip_feedback_prefix(raw_text)
+
+            if plan_level_feedback:
+                result["user_command"] = "refine_plan"
+                result["ui_message"] = (
+                    generate_feedback_acknowledgement(raw_text, phase)
+                    + " I will revise the current plan before regenerating the code."
+                )
+            else:
+                result["user_command"] = "reject_code"
+                result["ui_message"] = (
+                    generate_feedback_acknowledgement(raw_text, phase)
+                    + " I will use this feedback when regenerating the code."
+                )
+
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_text
             )
+
             return result
 
         result["ui_message"] = (
@@ -468,12 +577,6 @@ def human_interaction_node(state: AgentState):
 
     # ------------------------------------------------------------
     # RESULT_REVIEW
-    #
-    # In this phase:
-    # - show list -> updated holes list
-    # - retry -> same hole
-    # - rollback -> previous code version
-    # - ambiguous text -> ask clarification, do NOT auto-retry
     # ------------------------------------------------------------
     if phase == Phase.RESULT_REVIEW:
         show_list_request = (
@@ -535,12 +638,14 @@ def human_interaction_node(state: AgentState):
         if rollback_request:
             result["user_command"] = "rollback"
             result["user_feedback"] = ""
+
             if state.get("generated_code"):
                 save_negative_experience(
                     state.get("current_hole", {}).get("description", ""),
                     state.get("generated_code", ""),
                     "User requested rollback after validation result. Generated solution was considered unsafe, ineffective, or not worth keeping."
                 )
+
             return result
 
         result["ui_message"] = (

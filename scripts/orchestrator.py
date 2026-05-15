@@ -85,8 +85,13 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
+        elif cmd == "refine_plan":
+            next_phase = Phase.PLAN_REFINEMENT
         elif cmd == "rollback":
             next_phase = Phase.ROLLBACK
+            
+    elif phase == Phase.PLAN_REFINEMENT:
+        next_phase = Phase.PLAN_REVIEW
 
     elif phase == Phase.CODE_GENERATION:
         next_phase = Phase.CODE_REVIEW
@@ -96,6 +101,8 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.RUN_AFTER_FIX
         elif cmd == "reject_code":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
+        elif cmd == "refine_plan":
+            next_phase = Phase.PLAN_REFINEMENT
         elif cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
 
@@ -123,6 +130,7 @@ def route_from_phase_controller(state: AgentState):
         Phase.BUILD_HOLES_LIST,
         Phase.ROOT_CAUSE_ANALYSIS,
         Phase.COMPARE_RESULTS,
+        Phase.PLAN_REFINEMENT,
         Phase.ERROR_ANALYSIS
     ]:
         return "analyzer"

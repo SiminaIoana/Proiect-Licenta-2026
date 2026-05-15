@@ -4,6 +4,8 @@ from utils_files.results_saving import get_index
 import tiktoken
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from config import PROJECT_CONFIG
+import time
+from utils_files.results_saving import save_agent_metrics
 
 token_counter = TokenCountingHandler(
     tokenizer=tiktoken.get_encoding("cl100k_base").encode
@@ -15,7 +17,7 @@ Settings.callback_manager = CallbackManager([token_counter])
 def rag_node(state: AgentState):
      
      print("\nNode 0 RAG NODE: Searching documentation...")
-
+     start_time = time.time()
      token_counter.reset_counts()
 
      dynamic_path = PROJECT_CONFIG["dynamic_docs_path"]
@@ -45,6 +47,19 @@ Provide concise UVM/SystemVerilog rules for implementing functional coverage ins
      static_response = index_static.as_query_engine().query(static_query)
 
      rag_tokens = token_counter.total_llm_token_count
+     duration = round(time.time() - start_time, 2)
+
+     save_agent_metrics(
+    agent_name="rag",
+    phase=str(state.get("phase", "")),
+    hole_description="",
+    prompt_tokens=0,
+    response_tokens=0,
+    total_tokens=rag_tokens,
+    duration_seconds=duration,
+    status="SUCCESS",
+    notes="static_docs + dynamic_docs"
+)
 
      return {
         "uvm_rules": str(static_response), 

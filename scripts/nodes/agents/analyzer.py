@@ -1,10 +1,10 @@
 import os
 from llama_index.core import Settings
 from scripts.utils_files.memory import save_analyzer_experience
-from scripts.utils_files.results_saving import get_index
+from scripts.utils_files.results_saving import get_index, save_agent_metrics
 from utils_files.coverage import extract_coverage_holes, extract_coverage_percent, filter_log_for_hole
 from utils_files.file_ops import read_rtl, read_env, read_simulation_log, read_run_script
-from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_ROOT_CAUSE_PROMPT
+from prompts.analyzer_prompt import ANALYZER_SYSTEM_PROMPT, ANALYZER_ROOT_CAUSE_PROMPT, ANALYZER_PLAN_REFINEMENT_PROMPT
 from state import AgentState
 import tiktoken
 from config import PROJECT_CONFIG
@@ -12,6 +12,8 @@ import re
 from utils_files.phases import Phase
 from utils_files.status import Status
 from utils_files.prompt_utils import safe_format
+import time
+
 
 # ==================================
 # ------- ANALYZER NODE ------
@@ -32,6 +34,9 @@ def analyzer_node(state: AgentState):
     #====================================
     elif phase == Phase.ROOT_CAUSE_ANALYSIS:
         return root_cause_analysis(state)
+    
+    elif phase == Phase.PLAN_REFINEMENT:
+        return refine_action_plan(state)
 
     #====================================
     # ---- ERROR ANALYSIS ----
@@ -106,7 +111,64 @@ def build_holes_list(state: AgentState):
     }
 
 
+def refine_action_plan(state: AgentState):
+    print("\n[ANALYZER]: Refining current plan using user feedback...")
+
+    llm = Settings.llm
+    encoding = tiktoken.get_encoding("cl100k_base")
+
+    current_hole = state.get("current_hole", {})
+    hole_description = current_hole.get("description", "")
+
+    current_plan = state.get("action_plan", "")
+    user_feedback = state.get("user_feedback", "")
+    uvm_rules = state.get("uvm_rules", "")
+
+    prompt = safe_format(
+        ANALYZER_PLAN_REFINEMENT_PROMPT,
+        hole_description=hole_description,
+        current_plan=current_plan,
+        user_feedback=user_feedback,
+        uvm_rules=uvm_rules
+    )
+
+    full_prompt = ANALYZER_SYSTEM_PROMPT + "\n\n" + prompt
+
+    response = llm.complete(full_prompt)
+    response_text = response.text.strip()
+
+    prompt_tokens = len(encoding.encode(full_prompt))
+    response_tokens = len(encoding.encode(response_text))
+
+    target_file_match = re.search(
+        r"TARGET_FILES?:\s*([a-zA-Z0-9_.,\s`'\"-]+)",
+        response_text,
+        re.IGNORECASE
+    )
+
+    if target_file_match:
+        target_file = (
+            target_file_match.group(1)
+            .replace("`", "")
+            .replace('"', "")
+            .replace("'", "")
+            .strip()
+        )
+    else:
+        target_file = state.get("target_file", "")
+
+    return {
+        "root_cause_hole": response_text,
+        "action_plan": response_text,
+        "target_file": target_file,
+        "iteration_tokens": state.get("iteration_tokens", 0) + prompt_tokens + response_tokens,
+        "status": Status.SUCCESS
+    }
+
+
 def root_cause_analysis(state: AgentState):
+    start_time= time.time()
+
     llm = Settings.llm
     encoding = tiktoken.get_encoding("cl100k_base")
     current_hole = state.get("current_hole",{})
@@ -183,6 +245,20 @@ def root_cause_analysis(state: AgentState):
         target_file = target_file_match.group(1).replace('`', '').replace('"', '').replace("'", "").strip()
     else:
         target_file = "unknown_file.sv"
+
+    duration = round(time.time() - start_time, 2)
+
+    save_agent_metrics(
+    agent_name="analyzer",
+    phase=str(state.get("phase", "")),
+    hole_description=hole_description,
+    prompt_tokens=prompt_tokens,
+    response_tokens=response_tokens,
+    total_tokens=prompt_tokens + response_tokens,
+    duration_seconds=duration,
+    status=Status.SUCCESS.value,
+    notes=f"target_file={target_file}"
+    )
             
     print(f"[DEBUG] Extracted TARGET_FILES: {target_file}")
 

@@ -27,7 +27,7 @@ def initialize_llm():
     api_key=os.getenv("DEEPSEEK_API_KEY"),
     api_base="https://api.deepseek.com",
     is_chat_model=True,
-    temperature=0.2,
+    temperature=0.2,    
     max_tokens=8000,
     context_window=64000
 )

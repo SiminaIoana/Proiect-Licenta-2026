@@ -1,6 +1,8 @@
 from scripts.utils_files.status import Status
 from llama_index.core import Settings
 from state import AgentState
+import time
+from utils_files.results_saving import save_agent_metrics
 
 from utils_files.file_ops import read_specific_files
 from utils_files.results_saving import get_index
@@ -19,6 +21,7 @@ def generator_node(state: AgentState):
     print("[GENERATOR]: FIX ERRORS AND HOLES...")
     print("="*60)
 
+    start_time = time.time()
     llm = Settings.llm
     encoding = tiktoken.get_encoding("cl100k_base")
     feedback = state.get("user_feedback", "")
@@ -115,6 +118,20 @@ def generator_node(state: AgentState):
     prompt_tokens = len(encoding.encode(full_prompt))
     #responde tokens
     response_tokens = len(encoding.encode(response.text))
+
+    duration = round(time.time() - start_time, 2)
+
+    save_agent_metrics(
+    agent_name="generator",
+    phase=str(state.get("phase", "")),
+    hole_description=state.get("current_hole", {}).get("description", ""),
+    prompt_tokens=prompt_tokens,
+    response_tokens=response_tokens,
+    total_tokens=prompt_tokens + response_tokens,
+    duration_seconds=duration,
+    status=Status.SUCCESS.value,
+    notes=f"target_file={target_file}"
+)
     current_tokens = state.get("iteration_tokens", 0)
     total_tokens = prompt_tokens + response_tokens + current_tokens
 
