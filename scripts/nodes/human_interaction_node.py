@@ -411,9 +411,6 @@ def human_interaction_node(state: AgentState):
     # ------------------------------------------------------------
     # CODE_REVIEW
     # ------------------------------------------------------------
-        # ------------------------------------------------------------
-    # CODE_REVIEW
-    # ------------------------------------------------------------
     if phase == Phase.CODE_REVIEW:
         negative_intent = has_negative_or_correction_intent(raw_text)
         feedback_like = is_feedback_like(raw_text)
@@ -468,12 +465,32 @@ def human_interaction_node(state: AgentState):
             )
         )
 
-        simple_reject = raw_lower in [
+        explicit_reanalysis_request = (
+            has_word(raw_text, ["reanalyze", "reanalyse"])
+            or contains_any(
+                raw_text,
+                [
+                    "root cause",
+                    "redo analysis",
+                    "rerun analysis",
+                    "run analysis again",
+                    "restart analysis",
+                    "start over analysis",
+                    "full analysis",
+                    "analyze again",
+                    "analyse again",
+                ]
+            )
+        )
+
+        simple_regenerate = raw_lower in [
             "2",
             "reject",
             "regenerate",
             "retry",
             "try again",
+            "regenerate code",
+            "generate again",
         ]
 
         plan_level_feedback = contains_any(
@@ -513,6 +530,27 @@ def human_interaction_node(state: AgentState):
                 "replace_coverpoint",
                 "replace marker",
                 "scope",
+                "plan",
+                "revise plan",
+                "revise the plan",
+                "change plan",
+                "change the plan",
+                "too complicated",
+                "is too complicated",
+                "too complex",
+                "make it simple",
+                "make it simpler",
+                "simpler plan",
+                "unsafe",
+                "not safe",
+                "not accepted",
+                "not sampled",
+                "does not account",
+                "doesn't account",
+                "wrong strategy",
+                "change strategy",
+                "not enough",
+                "not sufficient",
             ]
         )
 
@@ -527,8 +565,39 @@ def human_interaction_node(state: AgentState):
             inject_generated_code(state)
             return result
 
-        if simple_reject:
-            result["user_command"] = "reject_code"
+        if explicit_reanalysis_request:
+            result["user_command"] = "retry_same_hole"
+            result["user_feedback"] = state.get("user_feedback", "")
+            result["ui_message"] = (
+                "I understand. I will rerun the root-cause analysis for the same coverage hole."
+            )
+
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_text
+            )
+
+            return result
+
+        if plan_level_feedback:
+            result["user_feedback"] = strip_feedback_prefix(raw_text)
+            result["user_command"] = "refine_plan"
+            result["ui_message"] = (
+                generate_feedback_acknowledgement(raw_text, phase)
+                + " I will revise the current plan before regenerating the code."
+            )
+
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_text
+            )
+
+            return result
+        
+        if simple_regenerate:
+            result["user_command"] = "regenerate_code"
             result["user_feedback"] = state.get("user_feedback", "")
             result["ui_message"] = (
                 "I understand. I will regenerate the code using the current plan."
@@ -542,18 +611,11 @@ def human_interaction_node(state: AgentState):
 
             return result
 
-        if reject_request or feedback_like or negative_intent or plan_level_feedback:
+        if reject_request or feedback_like or negative_intent:
             result["user_feedback"] = strip_feedback_prefix(raw_text)
 
-            if plan_level_feedback:
-                result["user_command"] = "refine_plan"
-                result["ui_message"] = (
-                    generate_feedback_acknowledgement(raw_text, phase)
-                    + " I will revise the current plan before regenerating the code."
-                )
-            else:
-                result["user_command"] = "reject_code"
-                result["ui_message"] = (
+            result["user_command"] = "regenerate_code"
+            result["ui_message"] = (
                     generate_feedback_acknowledgement(raw_text, phase)
                     + " I will use this feedback when regenerating the code."
                 )

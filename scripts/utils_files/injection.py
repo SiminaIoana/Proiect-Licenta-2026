@@ -3,6 +3,7 @@ from state import AgentState
 from utils_files.file_ops import extract_code
 from config import PROJECT_CONFIG
 import os
+import re
 
 def inject_generated_code(state: AgentState):
     generated_code = state.get("generated_code", "")
@@ -34,6 +35,65 @@ def find_file_in_dirs(filename: str, dirs: list):
                 return os.path.join(root, filename)
 
     return None
+
+
+def replace_sv_coverpoint(file_content: str, coverpoint_name: str, new_coverpoint_code: str) -> str:
+    """
+    Replaces a named SystemVerilog coverpoint block:
+    cp_name: coverpoint ... {
+       ...
+    }
+
+    It uses brace matching so it can safely replace the full coverpoint body.
+    """
+    import re
+
+    start_pattern = re.compile(
+        rf"\b{re.escape(coverpoint_name)}\s*:\s*coverpoint\b",
+        flags=re.MULTILINE
+    )
+
+    match = start_pattern.search(file_content)
+
+    if not match:
+        raise ValueError(f"Could not find coverpoint '{coverpoint_name}' for replacement.")
+
+    start_idx = match.start()
+
+    brace_start = file_content.find("{", match.end())
+    if brace_start == -1:
+        raise ValueError(f"Coverpoint '{coverpoint_name}' has no opening brace.")
+
+    depth = 0
+    end_idx = None
+
+    for i in range(brace_start, len(file_content)):
+        char = file_content[i]
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+
+            if depth == 0:
+                end_idx = i + 1
+
+                while end_idx < len(file_content) and file_content[end_idx].isspace():
+                    end_idx += 1
+
+                if end_idx < len(file_content) and file_content[end_idx] == ";":
+                    end_idx += 1
+
+                break
+
+    if end_idx is None:
+        raise ValueError(f"Could not find end of coverpoint '{coverpoint_name}'.")
+
+    return (
+        file_content[:start_idx]
+        + new_coverpoint_code.strip()
+        + file_content[end_idx:]
+    )
 
 
 def create_rollback_checkpoint(state: AgentState):
@@ -75,27 +135,61 @@ def restore_rollback_files(state: AgentState):
     }
 
 
-
 def apply_smart_injection(file_path: str, new_content: str):
     with open(file_path, "r", encoding="utf-8") as f:
         old_content = f.read()
 
     filename = os.path.basename(file_path).lower()
 
-    # remove FILE marker line
+    replace_class_name = None
+    replace_coverpoint_name = None
+    replace_covergroup_name = None
+
+    # ------------------------------------------------------------
+    # Remove injector marker lines and detect replacement markers
+    # ------------------------------------------------------------
     lines = new_content.strip().splitlines()
-    clean_lines=[]
+    clean_lines = []
+
     for line in lines:
         if "FILE:" in line:
             continue
+
+        class_match = re.match(
+            r"\s*//\s*REPLACE_CLASS:\s*([a-zA-Z_][a-zA-Z0-9_$]*)\s*;?\s*$",
+            line
+        )
+        if class_match:
+            replace_class_name = class_match.group(1)
+            continue
+
+        coverpoint_match = re.match(
+            r"\s*//\s*REPLACE_COVERPOINT:\s*([a-zA-Z_][a-zA-Z0-9_$]*)\s*;?\s*$",
+            line
+        )
+        if coverpoint_match:
+            replace_coverpoint_name = coverpoint_match.group(1)
+            continue
+
+        covergroup_match = re.match(
+            r"\s*//\s*REPLACE_COVERGROUP:\s*([a-zA-Z_][a-zA-Z0-9_$]*)\s*;?\s*$",
+            line
+        )
+        if covergroup_match:
+            replace_covergroup_name = covergroup_match.group(1)
+            continue
+
         clean_lines.append(line)
+
     new_content = "\n".join(clean_lines).strip()
 
     if not new_content.strip():
         print(f"[INJECTOR] Empty content, skipping injection for {file_path}")
         return
 
-    # special handling for MakeSVfile.bat
+    # ------------------------------------------------------------
+    # Special handling for MakeSVfile.bat
+    # ------------------------------------------------------------
     if filename.endswith(".bat"):
         marker = ":: functional coverage report"
 
@@ -118,21 +212,101 @@ def apply_smart_injection(file_path: str, new_content: str):
             f.write(updated_content)
 
         return
-    
+
+    # ------------------------------------------------------------
+    # SystemVerilog handling
+    # ------------------------------------------------------------
     if filename.endswith(".sv"):
 
         if new_content in old_content:
             print(f"[INJECTOR] SV content already exists in {file_path}")
             return
 
+        # --------------------------------------------------------
+        # REPLACE_CLASS
+        # --------------------------------------------------------
+        if replace_class_name:
+            class_pattern = re.compile(
+                r"(^[ \t]*(?:virtual\s+)?class\s+"
+                + re.escape(replace_class_name)
+                + r"\b.*?^[ \t]*endclass\b[^\n]*(?:\n|$))",
+                re.MULTILINE | re.DOTALL
+            )
+
+            updated_content, replacements = class_pattern.subn(
+                new_content.rstrip() + "\n",
+                old_content,
+                count=1
+            )
+
+            if replacements:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+
+                print(f"[INJECTOR] Replaced class {replace_class_name} in {file_path}")
+                return
+
+            raise ValueError(
+                f"[INJECTOR ERROR] Class {replace_class_name} not found in {file_path}. "
+                "Replacement marker was present, so append is not allowed."
+            )
+
+        # --------------------------------------------------------
+        # REPLACE_COVERGROUP
+        # --------------------------------------------------------
+        if replace_covergroup_name:
+            covergroup_pattern = re.compile(
+                r"(^[ \t]*covergroup\s+"
+                + re.escape(replace_covergroup_name)
+                + r"\b.*?^[ \t]*endgroup\b[^\n]*(?:\n|$))",
+                re.MULTILINE | re.DOTALL
+            )
+
+            updated_content, replacements = covergroup_pattern.subn(
+                new_content.rstrip() + "\n",
+                old_content,
+                count=1
+            )
+
+            if replacements:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+
+                print(f"[INJECTOR] Replaced covergroup {replace_covergroup_name} in {file_path}")
+                return
+
+            raise ValueError(
+                f"[INJECTOR ERROR] Covergroup {replace_covergroup_name} not found in {file_path}. "
+                "Replacement marker was present, so append is not allowed."
+            )
+
+        # --------------------------------------------------------
+        # REPLACE_COVERPOINT
+        # --------------------------------------------------------
+        if replace_coverpoint_name:
+            updated_content = replace_sv_coverpoint(
+                old_content,
+                replace_coverpoint_name,
+                new_content
+            )
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(updated_content)
+
+            print(f"[INJECTOR] Replaced coverpoint {replace_coverpoint_name} in {file_path}")
+            return
+
+        # --------------------------------------------------------
+        # Default APPEND behavior for SV files
+        # --------------------------------------------------------
         if "`endif" in old_content:
             idx = old_content.rfind("`endif")
             updated_content = (
-            old_content[:idx].rstrip()
-            + "\n\n"
-            + new_content
-            + "\n\n"
-            + old_content[idx:]
+                old_content[:idx].rstrip()
+                + "\n\n"
+                + new_content
+                + "\n\n"
+                + old_content[idx:]
             )
             print(f"[INJECTOR] Inserted SV code before `endif in {file_path}")
         else:
@@ -144,7 +318,9 @@ def apply_smart_injection(file_path: str, new_content: str):
 
         return
 
-    # default behavior for files
+    # ------------------------------------------------------------
+    # Default behavior for non-SV / non-BAT files
+    # ------------------------------------------------------------
     updated_content = old_content + "\n\n" + new_content
 
     with open(file_path, "w", encoding="utf-8") as f:

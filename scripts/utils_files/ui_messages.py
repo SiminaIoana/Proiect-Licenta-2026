@@ -71,13 +71,12 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
 
         if coverage >= 100.0 and not holes_list:
             ui_message += "🎯 **Target reached. Full coverage achieved.**\n\n"
-            ui_message += "- **[q]** Finish session."
-        else:
-            ui_message += "**What would you like to do next?**\n"
-            ui_message += "- **[1]** Show updated holes list / pick another coverage hole.\n"
-            ui_message += "- **[2]** Retry fixing the same hole.\n"
-            ui_message += "- **[3]** Rollback to previous code version.\n"
-            ui_message += "- **[q]** Quit."
+
+        ui_message += "**What would you like to do next?**\n"
+        ui_message += "- **[1]** Show updated holes list / pick another coverage hole.\n"
+        ui_message += "- **[2]** Retry fixing the same hole.\n"
+        ui_message += "- **[3]** Rollback to previous code version.\n"
+        ui_message += "- **[q]** Quit."
 
         return ui_message
     

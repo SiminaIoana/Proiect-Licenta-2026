@@ -99,6 +99,8 @@ def phase_controller_node(state: AgentState):
     elif phase == Phase.CODE_REVIEW:
         if cmd == "approve_code":
             next_phase = Phase.RUN_AFTER_FIX
+        elif cmd == "regenerate_code":
+            next_phase = Phase.CODE_GENERATION
         elif cmd == "reject_code":
             next_phase = Phase.ROOT_CAUSE_ANALYSIS
         elif cmd == "refine_plan":
