@@ -155,9 +155,18 @@ Rules:
 === PLAN COMPLIANCE RULE ===
 Follow the Analyzer's chosen strategy exactly.
 
-If the Analyzer chose RUN_SCRIPT_FIX:
-- output only the MakeSVfile.bat command block needed by the plan;
-- do not generate SystemVerilog.
+if the Analyzer chose RUN_SCRIPT_FIX:
+- Output only the run-script command block.
+- Do not generate SystemVerilog code.
+- Use the exact existing UVM test name from the approved plan.
+- Derive artifact names from the test name:
+  - coverage database: cov_<test_name>
+  - log file: xsim_<test_name>.log
+- Example:
+  UVM_TESTNAME=test_data_bins
+  -> -cov_db_name cov_test_data_bins
+  -> > xsim_test_data_bins.log
+- Do not use generic names like cov_test2 or xsim_test2.log unless the existing script already follows that naming scheme and there is no risk of collision.
 
 If the Analyzer chose NEW_SEQUENCE:
 - generate a new complete sequence class with a name that does not already exist;

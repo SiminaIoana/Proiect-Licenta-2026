@@ -276,9 +276,25 @@ DECISION ORDER
 1. Check whether the coverage model is actionable.
    - Automatic unclear bins -> MODIFY_BINS / MODIFY_COVERPOINT.
    - Explicit bins -> stimulus may be valid.
+   
 2. Check whether the required sequence/test/run command already exists and is executed.
+
+   If a suitable sequence and a suitable test already exist, but the test is not executed by the run script:
+   - choose ROOT_CAUSE_TYPE: MISSING_TEST_EXECUTION;
+   - choose CHOSEN STRATEGY: RUN_SCRIPT_FIX;
+   - choose CODE_ACTION: APPEND;
+   - set TARGET_FILES to only the configured run script;
+   - do not create a new sequence;
+   - do not create a new test.
+
+   Choose NEW_SEQUENCE only if no suitable existing sequence exists, or if the existing sequence is clearly insufficient for the selected coverage hole.
+
+   Choose NEW_TEST only if a suitable sequence exists but no suitable test exists to start it.
+
 3. Check whether the existing sequence is baseline.
    - If baseline and the scenario is directed/distinct, prefer NEW_SEQUENCE.
+   - This rule does not apply when a suitable non-baseline directed sequence/test already exists and only the run command is missing.
+.
 4. Check stimulus acceptance.
    - Do not propose writes that exceed DUT capacity.
    - Add reads/batches/drain when required.

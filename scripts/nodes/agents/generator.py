@@ -38,8 +38,20 @@ def generator_node(state: AgentState):
     working_dir = os.path.dirname(PROJECT_CONFIG["bat_file_path"])
     bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
     directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", ""), bat_dir]
-    core_files = "transaction.sv, sequence.sv, test.sv, MakeSVfile.bat"
+
+    core_context_files = PROJECT_CONFIG.get(
+    "core_context_files",
+    ["transaction.sv", "sequence.sv", "test.sv", "subscriber.sv"]
+    )
+
+    run_script_name = os.path.basename(PROJECT_CONFIG.get("bat_file_path", ""))
+
+    if run_script_name:
+        core_context_files.append(run_script_name)
+
+    core_files = ", ".join(dict.fromkeys(core_context_files))
     files_to_read = f"{target_file}, {core_files}"
+    
     target_code = read_specific_files(files_to_read, directories_to_search)
 
     # ----------------------------------------------

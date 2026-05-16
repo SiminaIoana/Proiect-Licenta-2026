@@ -199,6 +199,130 @@ Rules:
         )
 
 
+def route_review_input_with_llm(raw_text: str, phase: Phase, state: AgentState) -> dict:
+    """
+    Uses the LLM only for routing ambiguous review input.
+
+    The LLM must choose one allowed command for the current phase.
+    If unsure, it must choose refine_plan.
+    """
+
+    try:
+        llm = Settings.llm
+
+        current_hole = state.get("current_hole", {}).get("description", "")
+        last_result = state.get("root_cause_hole", "")
+        current_plan = state.get("action_plan", "")
+
+        if phase == Phase.PLAN_REVIEW:
+            allowed_commands = [
+                "approve_plan",
+                "refine_plan",
+                "show_list",
+                "quit",
+            ]
+            default_command = "refine_plan"
+
+        elif phase == Phase.CODE_REVIEW:
+            allowed_commands = [
+                "approve_code",
+                "regenerate_code",
+                "refine_plan",
+                "quit",
+            ]
+            default_command = "refine_plan"
+
+        elif phase == Phase.RESULT_REVIEW:
+            allowed_commands = [
+                "show_list",
+                "refine_plan",
+                "rollback",
+                "quit",
+            ]
+            default_command = "refine_plan"
+
+        else:
+            return {
+                "user_command": "",
+                "user_feedback": "",
+                "confidence": 0.0,
+            }
+
+        prompt = f"""
+You are a routing classifier for a human-in-the-loop AI verification assistant.
+
+Current phase:
+{phase}
+
+Allowed commands:
+{allowed_commands}
+
+Default command if unsure:
+{default_command}
+
+User input:
+{raw_text}
+
+Current selected coverage hole:
+{current_hole}
+
+Current/previous plan:
+{current_plan}
+
+Last result or analysis:
+{last_result}
+
+Classify the user's intent.
+
+Rules:
+- Return ONLY valid JSON.
+- Do not explain.
+- The command must be one of the allowed commands.
+- If the user gives technical feedback, criticism, suggestions, constraints, doubts, or observations, choose "refine_plan".
+- If the user says the generated code should be changed because of strategy, files, protocol, coverage, sampling, latency, transactions, monitor, or testbench behavior, choose "refine_plan".
+- In RESULT_REVIEW, "try again", "retry", "fix again", or any free technical feedback means "refine_plan".
+- Choose "approve_plan" or "approve_code" only if the user clearly approves with no correction or restriction.
+- Choose "regenerate_code" only for simple code regeneration without strategy change.
+- If unsure, choose the default command.
+
+JSON schema:
+{{
+  "user_command": "...",
+  "user_feedback": "...",
+  "confidence": 0.0
+}}
+"""
+
+        response = llm.complete(prompt)
+        text = response.text.strip()
+
+        import json
+        parsed = json.loads(text)
+
+        command = parsed.get("user_command", default_command)
+        feedback = parsed.get("user_feedback", raw_text)
+        confidence = float(parsed.get("confidence", 0.0))
+
+        if command not in allowed_commands:
+            command = default_command
+            feedback = raw_text
+            confidence = 0.0
+
+        return {
+            "user_command": command,
+            "user_feedback": feedback,
+            "confidence": confidence,
+        }
+
+    except Exception as e:
+        print(f"[HUMAN WARNING] LLM routing failed: {e}")
+
+        return {
+            "user_command": "refine_plan",
+            "user_feedback": raw_text,
+            "confidence": 0.0,
+        }
+
 # ==========================================
 # ---------- HUMAN INTERACTION ----------
 # ==========================================
@@ -641,94 +765,46 @@ def human_interaction_node(state: AgentState):
     # RESULT_REVIEW
     # ------------------------------------------------------------
     if phase == Phase.RESULT_REVIEW:
-        show_list_request = (
-            user_choice == "show_list"
-            or raw_lower == "1"
-            or has_word(raw_text, ["list"])
-            or contains_any(
-                raw_text,
-                [
-                    "show list",
-                    "updated list",
-                    "show updated list",
-                    "show updated holes list",
-                    "show me updated holes list",
-                    "holes list",
-                    "updated holes",
-                    "pick another",
-                    "another hole",
-                ]
-            )
-        )
-
-        retry_request = (
-            raw_lower == "2"
-            or has_word(raw_text, ["retry", "reanalyze", "reanalyse"])
-            or contains_any(
-                raw_text,
-                [
-                    "retry same hole",
-                    "try again",
-                    "retry analysis",
-                ]
-            )
-        )
-
-        rollback_request = (
-            raw_lower == "3"
-            or has_word(raw_text, ["rollback", "restore"])
-            or contains_any(
-                raw_text,
-                [
-                    "restore previous",
-                    "previous version",
-                    "restore previous version",
-                ]
-            )
-        )
-
-        if show_list_request:
+        # Clear deterministic commands first.
+        if raw_lower == "1" or has_word(raw_text, ["list", "back"]):
             result["user_command"] = "show_list"
             result["user_feedback"] = ""
             return result
 
-        if retry_request:
-            result["user_command"] = "retry_same_hole"
+        if raw_lower == "3" or has_word(raw_text, ["rollback", "restore", "revert", "undo"]):
+            result["user_command"] = "rollback"
+            result["user_feedback"] = ""
+            return result
+
+        if raw_lower == "q" or has_word(raw_text, ["quit", "exit", "stop"]):
+            result["user_command"] = "quit"
+            result["user_feedback"] = ""
+            return result
+
+        # In result review, numeric 2 means refine the current plan.
+        if raw_lower == "2":
+            result["user_command"] = "refine_plan"
             result["user_feedback"] = state.get("user_feedback", "")
             return result
 
-        if rollback_request:
-            result["user_command"] = "rollback"
+        # Ambiguous or natural input goes to LLM router.
+        routed = route_review_input_with_llm(raw_text, phase, state)
+
+        result["user_command"] = routed["user_command"]
+
+        if routed["user_command"] == "refine_plan":
+            result["user_feedback"] = routed.get("user_feedback") or raw_text
+            result["ui_message"] = (
+            "I will use your feedback to refine the current plan for the same coverage hole."
+            )
+        else:
             result["user_feedback"] = ""
 
-            if state.get("generated_code"):
-                save_negative_experience(
-                    state.get("current_hole", {}).get("description", ""),
-                    state.get("generated_code", ""),
-                    "User requested rollback after validation result. Generated solution was considered unsafe, ineffective, or not worth keeping."
-                )
-
-            return result
-
-        result["ui_message"] = (
-            "I could not clearly understand your next action.\n\n"
-            "Please type:\n"
-            "[1] Show updated holes list / pick another coverage hole\n"
-            "[2] Retry fixing the same hole\n"
-            "[3] Rollback to previous code version\n"
-            "[q] Quit"
+        print(
+        f"[DEBUG HUMAN RESULT_REVIEW LLM ROUTER] "
+        f"command='{result['user_command']}', "
+        f"feedback='{result['user_feedback']}', "
+        f"confidence={routed.get('confidence')}"
         )
+
         return result
-
-    # ------------------------------------------------------------
-    # FALLBACK
-    # ------------------------------------------------------------
-    return {
-        "ui_input": "",
-        "user_command": "",
-        "user_feedback": state.get("user_feedback", ""),
-        "ui_message": (
-            "I could not understand your request.\n\n"
-            "Please use one of the suggested options or provide a clearer instruction."
-        )
-    }

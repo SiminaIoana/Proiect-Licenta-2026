@@ -24,7 +24,7 @@ from utils_files.file_ops import (
 )
 from utils_files.results_saving import get_index, save_agent_metrics
 from scripts.utils_files.memory import save_analyzer_experience
-
+from utils_files.validator import validate_action_plan
 from prompts.analyzer_prompt import (
     ANALYZER_SYSTEM_PROMPT,
     ANALYZER_ROOT_CAUSE_PROMPT,
@@ -253,12 +253,16 @@ def root_cause_analysis(state: AgentState):
 
     response = llm.complete(full_prompt)
     response_text = response.text.strip()
-
+    validation = validate_action_plan(response_text, state)
+    response_text = validation.plan_text
+    target_file = validation.target_files
+    if validation.warnings:
+        print("[PLAN VALIDATOR] Corrections/warnings:")
+        for warning in validation.warnings:
+            print(f" - {warning}")
     prompt_tokens = len(encoding.encode(full_prompt))
     response_tokens = len(encoding.encode(response_text))
     total_tokens = state.get("iteration_tokens", 0) + prompt_tokens + response_tokens
-
-    target_file = extract_target_files_from_plan(response_text, "unknown_file.sv")
 
     duration = round(time.time() - start_time, 2)
 
@@ -314,14 +318,17 @@ def refine_action_plan(state: AgentState):
     response = llm.complete(full_prompt)
     response_text = response.text.strip()
 
+    validation = validate_action_plan(response_text, state)
+    response_text = validation.plan_text
+    target_file = validation.target_files
+
+    if validation.warnings:
+        print("[PLAN VALIDATOR] Warnings after refinement:")
+        for warning in validation.warnings:
+            print(f" - {warning}")
+
     prompt_tokens = len(encoding.encode(full_prompt))
     response_tokens = len(encoding.encode(response_text))
-
-    target_file = extract_target_files_from_plan(
-        response_text,
-        state.get("target_file", ""),
-    )
-
     return {
         "root_cause_hole": response_text,
         "action_plan": response_text,

@@ -42,10 +42,18 @@ class subscriber extends uvm_subscriber#(transaction);
     }
 
     cp_data: coverpoint trans.data_in {
-        bins ranges[10] = {[0:30]};
-        bins corners = {32'h0, 32'hFFFF_FFFF, 32'hAAAA_AAAA, 32'h5555_5555};
-    }
-      write_protocol_cross: cross we_cp, full_cp {
+    bins low   = {[0:2]};
+    bins mid1  = {[3:5]};
+    bins mid2  = {[6:8]};
+    bins mid3  = {[9:11]};
+    bins mid4  = {[12:14]};
+    bins mid5  = {[15:17]};
+    bins mid6  = {[18:20]};
+    bins mid7  = {[21:23]};
+    bins high  = {[24:30]};
+    bins corners = {32'h0, 32'hFFFF_FFFF, 32'hAAAA_AAAA, 32'h5555_5555};
+}
+   write_protocol_cross: cross we_cp, full_cp {
         // Write is active AND FIFO is not full
         bins write_ok   = binsof(we_cp.active) && binsof(full_cp.not_full);
         bins write_full = binsof(we_cp.active) && binsof(full_cp.is_full); // Corner case: overflow

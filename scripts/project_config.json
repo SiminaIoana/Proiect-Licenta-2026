@@ -6,5 +6,12 @@
     "sv_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/TB-FIFO",
     "rtl_dir": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/RTL-FIFO/",
     "tb_dir": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/TB-FIFO/",
-    "bat_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/SIM-FIFO/MakeSVfile.bat"
+    "bat_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/SIM-FIFO/MakeSVfile.bat",
+    "core_context_files": [
+  "transaction.sv",
+  "sequence.sv",
+  "test.sv",
+  "subscriber.sv",
+  "MakeSVfile.bat"
+]
 }
