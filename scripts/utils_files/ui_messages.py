@@ -1,8 +1,70 @@
 from state import AgentState
-from llama_index.core import Settings
 from utils_files.phases import Phase
 from utils_files.status import Status
 from utils_files.file_ops import extract_code
+
+import re
+
+
+def extract_plan_field(plan: str, field_name: str) -> str:
+    pattern = re.compile(
+        rf"^\s*{re.escape(field_name)}\s*:\s*(.+?)\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    match = pattern.search(plan or "")
+    return match.group(1).strip() if match else ""
+
+
+def extract_plan_section(plan: str, section_name: str) -> str:
+    pattern = re.compile(
+        rf"^\s*{re.escape(section_name)}\s*:\s*(.*?)(?=^\s*[A-Z_ ]+\s*:|\Z)",
+        re.IGNORECASE | re.DOTALL | re.MULTILINE,
+    )
+    match = pattern.search(plan or "")
+    if not match:
+        return ""
+
+    text = match.group(1).strip()
+    text = re.sub(r"\n{2,}", "\n", text)
+    return text
+
+
+def build_short_plan_view(plan: str, target: str) -> str:
+    short_response = extract_plan_section(plan, "SHORT_RESPONSE")
+    root_cause = extract_plan_section(plan, "ROOT_CAUSE_SUMMARY")
+    planned_change = extract_plan_section(plan, "PLANNED_CHANGE")
+
+    strategy = extract_plan_field(plan, "CHOSEN STRATEGY")
+    code_action = extract_plan_field(plan, "CODE_ACTION")
+    target_files = extract_plan_field(plan, "TARGET_FILES") or target
+
+    msg = ""
+
+    if short_response:
+        msg += f"**Summary:**\n{short_response}\n\n"
+
+    if root_cause:
+        msg += f"**Root cause:**\n{root_cause}\n\n"
+
+    msg += "**Proposed fix:**\n"
+
+    if strategy:
+        msg += f"- **Strategy:** `{strategy}`\n"
+
+    if code_action:
+        msg += f"- **Code action:** `{code_action}`\n"
+
+    if target_files:
+        msg += f"- **Target files:** `{target_files}`\n"
+
+    if planned_change:
+        msg += f"\n**Planned change:**\n{planned_change}\n"
+
+    if not msg.strip():
+        msg = "A short plan summary could not be extracted. Please review the full action plan in the debug logs."
+
+    return msg.strip()
+
 
 def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: str) -> str:
     ui_message = ""
@@ -44,24 +106,25 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
         target = state.get("target_file", "")
 
         ui_message += "### Proposed Action Plan\n\n"
-        ui_message += f"**Target file:** `{target}`\n\n"
-        ui_message += "---\n\n"
-        ui_message += f"{plan}\n\n"
-        ui_message += "---\n\n"
+        ui_message += build_short_plan_view(plan, target)
+        ui_message += "\n\n---\n\n"
         ui_message += "**What is your decision?**\n"
         ui_message += "- **[1]** Approve plan -> Let AI write code.\n"
         ui_message += "- **[2]** Regenerate plan -> Try another solution for the SAME hole.\n"
         ui_message += "- **[3]** Pick another hole.\n"
         ui_message += "- **[q]** Quit."
         return ui_message
-    
+
     if phase == Phase.RESULT_REVIEW:
         result_msg = state.get("root_cause_hole", "")
         coverage = state.get("coverage_value", 0.0)
         holes_list = state.get("holes_list", [])
         errors = state.get("compilation_error", "")
+
+        success_fixed = "SUCCESS_FIXED_HOLE" in result_msg
+
         ui_message += "### Validation Results\n\n"
-        
+
         if errors:
             ui_message += "### Vivado error after generated code\n\n"
             ui_message += f"```text\n{errors}\n```\n\n"
@@ -70,7 +133,17 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
             ui_message += f"{result_msg}\n\n"
 
         if coverage >= 100.0 and not holes_list:
-            ui_message += "🎯 **Target reached. Full coverage achieved.**\n\n"
+            ui_message += "**Target reached. Full coverage achieved.**\n\n"
+            ui_message += "**What would you like to do next?**\n"
+            ui_message += "- **[q]** Quit."
+            return ui_message
+
+        if success_fixed:
+            ui_message += "**The selected coverage hole was fixed.**\n\n"
+            ui_message += "**What would you like to do next?**\n"
+            ui_message += "- **[1]** Show updated holes list / choose another coverage hole.\n"
+            ui_message += "- **[q]** Quit."
+            return ui_message
 
         ui_message += "**What would you like to do next?**\n"
         ui_message += "- **[1]** Show updated holes list / pick another coverage hole.\n"
@@ -79,7 +152,7 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
         ui_message += "- **[q]** Quit."
 
         return ui_message
-    
+
     if phase == Phase.CODE_REVIEW:
         generated_code = state.get("generated_code", "")
         extracted_files = extract_code(generated_code)
@@ -89,7 +162,15 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
 
         for filename, file_content in extracted_files.items():
             ui_message += f"**File:** `{filename}`\n"
-            ui_message += f"```systemverilog\n{file_content}\n```\n\n"
+
+            if filename.lower().endswith(".bat"):
+                language = "bat"
+            elif filename.lower().endswith((".sv", ".svh", ".v")):
+                language = "systemverilog"
+            else:
+                language = "text"
+
+            ui_message += f"```{language}\n{file_content}\n```\n\n"
 
         ui_message += "---\n\n"
         ui_message += "**What is your decision?**\n"
@@ -97,5 +178,5 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
         ui_message += "- **[2]** Reject code -> Regenerate.\n"
         ui_message += "- **[q]** Quit."
         return ui_message
-    
+
     return "Waiting for next action..."

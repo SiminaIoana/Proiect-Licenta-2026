@@ -309,6 +309,34 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
     root_cause_type = parse_plan_field(corrected_plan, "ROOT_CAUSE_TYPE").upper()
     run_script = get_run_script_name()
 
+    sequence_exists_but_test_missing = (
+    contains_any(
+        corrected_plan,
+        [
+            "sequence exists",
+            "sequence already exists",
+            "existing sequence",
+            "sequence is available",
+            "sequence was found",
+        ],
+    )
+    and contains_any(
+        corrected_plan,
+        [
+            "test is missing",
+            "test does not exist",
+            "no test exists",
+            "missing test",
+            "missing test class",
+            "no test class",
+            "no uvm test",
+            "no test starts",
+            "not started by any test",
+            "sequence is not started",
+            "sequence is never started",
+        ],
+    )
+)
     missing_execution_evidence = contains_any(
         corrected_plan,
         [
@@ -328,10 +356,51 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
         ],
     )
 
+    if sequence_exists_but_test_missing and run_script:
+        test_file = find_file_by_keywords(existing_files, ["test"])
+
+        required_files = [
+        file_name
+        for file_name in [test_file, run_script]
+        if file_name
+    ]
+
+        corrected_plan = replace_or_add_field(
+        corrected_plan,
+        "CHOSEN STRATEGY",
+        "NEW_TEST",
+    )
+
+        corrected_plan = replace_or_add_field(
+        corrected_plan,
+        "CODE_ACTION",
+        "APPEND",
+    )
+
+        corrected_plan = replace_or_add_field(
+        corrected_plan,
+        "TARGET_FILES",
+        ", ".join(dict.fromkeys(required_files)),
+    )
+
+        strategy = "NEW_TEST"
+        code_action_raw = "APPEND"
+        target_files_raw = ", ".join(dict.fromkeys(required_files))
+
+        note = (
+        "A suitable sequence already exists, but no UVM test starts it. "
+        "The safe fix is to append a new test class in the existing test file "
+        "and add the new test execution command to the configured run script. "
+        "Do not create a duplicate sequence and do not use RUN_SCRIPT_FIX only."
+    )
+
+        warnings.append(note)
+        notes.append(note)
     if (
         root_cause_type == "MISSING_TEST_EXECUTION"
         and strategy in {"NEW_SEQUENCE", "NEW_TEST"}
         and missing_execution_evidence
+        and not sequence_exists_but_test_missing
         and run_script
     ):
         corrected_plan = replace_or_add_field(
@@ -384,6 +453,40 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
     if action_warning:
         warnings.append(action_warning)
         notes.append(action_warning)
+
+    if code_action == "MODIFY" and strategy == "NEW_SEQUENCE":
+        if contains_any(
+            corrected_plan,
+        [
+            "modify the existing",
+            "modify existing",
+            "existing directed sequence",
+            "existing sequence",
+            "current sequence",
+            "sequence already exists",
+            "already exists",
+            "rather than adding",
+            "rather than creating",
+            "do not create",
+            "not append",
+            "instead of appending",
+        ],
+        ):
+            corrected_plan = replace_or_add_field(
+            corrected_plan,
+            "CHOSEN STRATEGY",
+            "MODIFY_EXISTING_SEQUENCE",
+            )
+
+            strategy = "MODIFY_EXISTING_SEQUENCE"
+
+            note = (
+            "CODE_ACTION is MODIFY and the plan refers to an existing sequence. "
+            "Changed strategy from NEW_SEQUENCE to MODIFY_EXISTING_SEQUENCE."
+            )
+
+            warnings.append(note)
+            notes.append(note)
 
     # ------------------------------------------------------------
     # 5. Normalize target files after possible strategy correction
@@ -490,7 +593,7 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
     "the plan explicitly proves that the existing ones are insufficient."
     )
 
-    notes.append(
+        notes.append(
     "When adding a run command for an existing UVM test, derive the coverage "
     "database name and log file name from the UVM_TESTNAME. Example: for "
     "UVM_TESTNAME=test_data_bins, use -cov_db_name cov_test_data_bins and "

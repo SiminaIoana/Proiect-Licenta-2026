@@ -68,7 +68,7 @@ def phase_controller_node(state: AgentState):
     elif phase == Phase.RESULT_REVIEW:
         if cmd == "show_list":
             next_phase = Phase.BUILD_HOLES_LIST
-        elif cmd == ["refine_plan","retry_same_hole"]:
+        elif cmd == "refine_plan":
             next_phase = Phase.PLAN_REFINEMENT
         elif cmd == "rollback":
             next_phase = Phase.ROLLBACK

@@ -106,33 +106,6 @@ covergroup existing_covergroup_name(...);
 endgroup
 ```
 
-When replacing an existing task, output:
-
-```systemverilog
-// FILE: exact_filename.sv
-// REPLACE_TASK: existing_task_name
-task existing_task_name(...);
-   ...
-endtask
-```
-
-When replacing an existing function, output:
-
-```systemverilog
-// FILE: exact_filename.sv
-// REPLACE_FUNCTION: existing_function_name
-function ... existing_function_name(...);
-   ...
-endfunction
-```
-
-When modifying the run script, output:
-
-```bat
-// FILE: MakeSVfile.bat
-// REPLACE_OR_ADD_COMMAND: short_description
-...
-```
 
 Important:
 - Do not use SEARCH/REPLACE markers.
@@ -337,9 +310,6 @@ Preserve existing macro style and UVM style.
    // REPLACE_CLASS: name
    // REPLACE_COVERPOINT: name
    // REPLACE_COVERGROUP: name
-   // REPLACE_TASK: name
-   // REPLACE_FUNCTION: name
-   // REPLACE_OR_ADD_COMMAND: description
 5. If CODE_ACTION is APPEND, do not output REPLACE markers unless the plan explicitly asks for modifying existing code.
 6. Use:
    - ```systemverilog for .sv files
@@ -388,6 +358,11 @@ For explicit bins:
 - Use only Vivado-style xsim commands already present in the run script.
 - Do NOT output the full MakeSVfile.bat file.
 - For MakeSVfile.bat APPEND actions, output ONLY the new xsim command block needed by the plan.
+- For MakeSVfile.bat APPEND actions, output one ```bat code block.
+- The first line of that block MUST be:
+  // FILE: MakeSVfile.bat
+- After the // FILE line, output ONLY the new xsim command block needed by the plan.
+- Never output a raw xsim command block without the // FILE: MakeSVfile.bat marker.
 - For MakeSVfile.bat MODIFY actions, output the corrected command block with // REPLACE_OR_ADD_COMMAND.
 
 The MakeSVfile.bat command block should follow the style already present in the current run script.
@@ -400,7 +375,9 @@ if %ERRORLEVEL% NEQ 0 echo [WARNING] <new_test_name> failed!
 If the plan asks for a new dedicated sequence and a new test, normally output exactly these blocks:
 1. sequence.sv containing the complete new sequence class.
 2. test.sv containing the complete new test class that starts that exact sequence.
-3. MakeSVfile.bat containing only the new xsim command block for that exact test.
+3. MakeSVfile.bat containing only:
+   :: FILE: MakeSVfile.bat
+   followed by the new xsim command block for that exact test.
 
 Do not output only the sequence if the plan requires the test to run it.
 Do not output only the test if the plan also requires a new sequence.
@@ -458,9 +435,6 @@ OUTPUT REQUIREMENTS:
    // REPLACE_CLASS: name
    // REPLACE_COVERPOINT: name
    // REPLACE_COVERGROUP: name
-   // REPLACE_TASK: name
-   // REPLACE_FUNCTION: name
-   // REPLACE_OR_ADD_COMMAND: description
 5. Use:
    - ```systemverilog for .sv files
    - ```bat for MakeSVfile.bat

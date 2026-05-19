@@ -323,6 +323,11 @@ JSON schema:
             "confidence": 0.0,
         }
 
+
+def is_success_fixed_hole_result(state: AgentState) -> bool:
+    result_text = state.get("root_cause_hole", "")
+    return "SUCCESS_FIXED_HOLE" in result_text
+
 # ==========================================
 # ---------- HUMAN INTERACTION ----------
 # ==========================================
@@ -738,10 +743,10 @@ def human_interaction_node(state: AgentState):
         if reject_request or feedback_like or negative_intent:
             result["user_feedback"] = strip_feedback_prefix(raw_text)
 
-            result["user_command"] = "regenerate_code"
+            result["user_command"] = "refine_plan"
             result["ui_message"] = (
                     generate_feedback_acknowledgement(raw_text, phase)
-                    + " I will use this feedback when regenerating the code."
+                    + " I will refine the current plan before regenerating the code."
                 )
 
             save_negative_experience(
@@ -766,6 +771,26 @@ def human_interaction_node(state: AgentState):
     # ------------------------------------------------------------
     if phase == Phase.RESULT_REVIEW:
         # Clear deterministic commands first.
+        success_fixed = is_success_fixed_hole_result(state)
+        if success_fixed:
+            if raw_lower == "1" or has_word(raw_text, ["list", "back", "another"]):
+                result["user_command"] = "show_list"
+                result["user_feedback"] = ""
+                return result
+
+            if raw_lower == "q" or has_word(raw_text, ["quit", "exit", "stop"]):
+                result["user_command"] = "quit"
+                result["user_feedback"] = ""
+                return result
+
+            result["ui_message"] = (
+                "The selected coverage hole was already fixed.\n\n"
+                "Please type:\n"
+                "[1] Show updated holes list / choose another coverage hole\n"
+                "[q] Quit"
+            )
+            return result
+        
         if raw_lower == "1" or has_word(raw_text, ["list", "back"]):
             result["user_command"] = "show_list"
             result["user_feedback"] = ""
