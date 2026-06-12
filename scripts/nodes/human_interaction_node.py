@@ -374,12 +374,59 @@ def human_interaction_node(state: AgentState):
     # ERROR / FAILED PLAN REVIEW
     # ------------------------------------------------------------
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:
-        rollback_request = (
-            has_word(raw_text, ["1", "rollback", "restore"])
-            or contains_any(raw_text, ["previous version", "restore previous"])
+        auto_fix_allowed = state.get("auto_fix_allowed", True)
+        has_rollback = bool(state.get("rollback_files", {}))
+
+        fix_request = (
+            raw_lower == "1"
+            or has_word(raw_text, ["fix", "repair", "correct", "generate"])
+            or contains_any(
+                raw_text,
+                [
+                    "fix syntax",
+                    "fix error",
+                    "generate fix",
+                    "correct code",
+                    "try to fix",
+                    "repair code",
+                    "error analysis",
+                ]
+            )
         )
 
+        rollback_request = (
+            raw_lower == "2" 
+            or has_word(raw_text, ["rollback", "restore", "revert", "undo"]) 
+            or contains_any(
+            raw_text,
+            [
+                "previous version",
+                "restore previous",
+                "rollback code",
+                "revert code",
+            ]
+        )
+    )
+
+        if fix_request:
+            if not auto_fix_allowed:
+                result["ui_message"] = (
+                    "This error was classified as unsafe for automatic code fixing. "
+                    "Rollback or manual correction is recommended."
+                )
+                return result
+
+            result["user_command"] = "fix_syntax"
+            result["user_feedback"] = ""
+            return result
+
         if rollback_request:
+            if not has_rollback:
+                result["ui_message"] = (
+                    "Rollback is not available because no checkpoint was found for this run."
+                )
+                return result
+
             result["user_command"] = "rollback"
             result["user_feedback"] = ""
 
@@ -390,15 +437,15 @@ def human_interaction_node(state: AgentState):
                     errors or "User requested rollback after Vivado error."
                 )
 
-        else:
-            result["ui_message"] = (
-                "The generated code caused a Vivado error.\n\n"
-                "Recommended action: rollback to the previous code version.\n\n"
-                "Please type:\n"
-                "[1] Rollback to previous code version\n"
-                "[q] Quit"
-            )
+            return result
 
+        result["ui_message"] = (
+            "I could not understand the selected action.\n\n"
+            "Please type:\n"
+            "[1] Generate corrected code based on the error analysis\n"
+            "[2] Rollback to previous code version\n"
+            "[q] Quit"
+        )
         return result
 
     # ------------------------------------------------------------

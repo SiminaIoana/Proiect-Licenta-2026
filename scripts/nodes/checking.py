@@ -212,24 +212,101 @@ def build_combined_simulation_log(working_dir: str, raw_output: str = "") -> str
 # =====================================================
 # ------ VIVADO ERROR PARSING ------
 # =====================================================
-def has_vivado_error(returncode: int, raw_output: str) -> bool:
-    return returncode != 0 or "ERROR:" in raw_output
+def has_vivado_error(returncode: int, raw_output: str, combined_log: str = "") -> bool:
+    """
+    Detects only real blocking errors.
 
+    A run is considered failed only when:
+    - Vivado/XSim returns a non-zero process code;
+    - Vivado reports a real compile/elaboration error;
+    - UVM_ERROR or UVM_FATAL count is greater than 0.
+
+    It does NOT fail only because words like FAILED or WARNING appear in logs.
+    """
+
+    text = (raw_output or "") + "\n" + (combined_log or "")
+    text_lower = text.lower()
+
+    # 1. Process-level failure.
+    if returncode != 0:
+        return True
+
+    # 2. Real Vivado/SystemVerilog blocking errors.
+    hard_error_markers = [
+        "ERROR:",
+        "FATAL:",
+        "syntax error",
+        "elaboration failed",
+        "compilation failed",
+    ]
+
+    if any(marker.lower() in text_lower for marker in hard_error_markers):
+        return True
+
+    # 3. UVM summary counts. Only fail if count > 0.
+    uvm_error_match = re.search(r"UVM_ERROR\s*:\s*(\d+)", text)
+    if uvm_error_match and int(uvm_error_match.group(1)) > 0:
+        return True
+
+    uvm_fatal_match = re.search(r"UVM_FATAL\s*:\s*(\d+)", text)
+    if uvm_fatal_match and int(uvm_fatal_match.group(1)) > 0:
+        return True
+
+    return False
+
+def read_text_file_safe(path: str) -> str:
+    """
+    Reads a text file safely. Used for combined_xsim.log.
+    """
+
+    if not path or not os.path.exists(path):
+        return ""
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    except Exception as e:
+        print(f"[CHECKER WARNING] Could not read log file {path}: {e}")
+        return ""
 
 def parse_vivado_failure(raw_output: str):
     if "not recognized" in raw_output:
         return "SYSTEM ERROR: Vivado path incorrect.", "System/Path Error"
 
-    error_lines = [
-        line for line in raw_output.split("\n")
-        if "ERROR:" in line or "FATAL:" in line or "CRITICAL WARNING:" in line
-    ]
+    error_lines = []
+
+    for line in raw_output.split("\n"):
+        line_lower = line.lower()
+
+        # Real Vivado/SystemVerilog errors
+        if (
+            "ERROR:" in line
+            or "FATAL:" in line
+            or "syntax error" in line_lower
+            or "elaboration failed" in line_lower
+            or "compilation failed" in line_lower
+        ):
+            error_lines.append(line)
+            continue
+
+        # UVM errors only if count > 0
+        m_err = re.search(r"UVM_ERROR\s*:\s*(\d+)", line)
+        if m_err and int(m_err.group(1)) > 0:
+            error_lines.append(line)
+            continue
+
+        m_fat = re.search(r"UVM_FATAL\s*:\s*(\d+)", line)
+        if m_fat and int(m_fat.group(1)) > 0:
+            error_lines.append(line)
+            continue
 
     if error_lines:
-        errors = "\n".join(error_lines[:15])
+        errors = "\n".join(error_lines[:20])
     else:
-        lines = [line for line in raw_output.split("\n") if line.strip()]
-        errors = "\n".join(lines[-30:]) if lines else "Unknown Vivado failure. No output captured."
+        errors = (
+            "Vivado/XSim returned a failure status, but no explicit blocking "
+            "ERROR, FATAL, UVM_ERROR > 0, or UVM_FATAL > 0 was found."
+        )
 
     return errors, "Vivado Execution Error"
 
@@ -316,12 +393,16 @@ def checker_node(state: AgentState):
     )
 
     combined_log_path = build_combined_simulation_log(
-        paths["working_dir"],
-        raw_output
+    paths["working_dir"],
+    raw_output
     )
 
-    if has_vivado_error(returncode, raw_output):
-        errors, error_summary = parse_vivado_failure(raw_output)
+
+    combined_log_text = read_text_file_safe(combined_log_path)
+    full_error_text = raw_output + "\n" + combined_log_text
+
+    if has_vivado_error(returncode, raw_output, combined_log_text):
+        errors, error_summary = parse_vivado_failure(full_error_text)
         status = Status.FAILED
         coverage_val = "N/A"
 

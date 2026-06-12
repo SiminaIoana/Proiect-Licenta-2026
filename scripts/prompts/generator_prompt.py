@@ -454,6 +454,8 @@ SYSTEMVERILOG RULES:
 - The macro `uvm_info` MUST have exactly 3 arguments:
   `uvm_info("TAG", "message", UVM_LEVEL)
 - Do NOT add a fourth argument to `uvm_info`.
+- Use the ERROR ANALYSIS / ACTION PLAN from the Analyzer as the main explanation of what must be fixed.
+- Prefer modifying only files listed in TARGET_FILES.
 
 VIVADO SCRIPT RULES:
 - The project uses Vivado, NOT ModelSim/Questa.

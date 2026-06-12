@@ -675,3 +675,4 @@ def filter_log_for_hole(sim_log: str, hole_description: str, max_lines: int = 12
 
     # Last fallback: return the tail of the log.
     return "\n".join(log_lines[-max_lines:])
+

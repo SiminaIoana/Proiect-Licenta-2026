@@ -108,7 +108,7 @@ def phase_controller_node(state: AgentState):
 
     elif phase == Phase.RUN_AFTER_FIX:
         if status == Status.FAILED:
-            next_phase = Phase.RESULT_REVIEW
+            next_phase = Phase.ERROR_ANALYSIS
         else:
             next_phase = Phase.COMPARE_RESULTS
 
@@ -220,6 +220,9 @@ def build_and_run():
         "previous_coverage":0.0,
         "phase": Phase.INIT,
         "status": Status.PROCESSING,
+        "error_category": "",
+        "error_analysis": "",
+        "auto_fix_allowed": False,
     }
     print("\n============= START LANGRGRAPH SYSTEM ===============\n")
   

@@ -44,3 +44,7 @@ class AgentState(TypedDict):
     ui_message:                 str             # formatted message for UI display
     ui_input:                   str             # user input from UI
    
+   # error analysis
+    error_category:             str
+    error_analysis:             str
+    auto_fix_allowed:           bool

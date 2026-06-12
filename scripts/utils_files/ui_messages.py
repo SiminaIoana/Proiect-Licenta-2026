@@ -70,12 +70,40 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
     ui_message = ""
 
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:
-        ui_message += "### Vivado Compilation Failed\n\n"
-        ui_message += "**The generated code has syntax errors:**\n"
-        ui_message += f"```text\n{errors}\n```\n\n"
-        ui_message += "**Please choose an action:**\n"
-        ui_message += "- **[1]** Let the AI try to fix the syntax error automatically.\n"
-        ui_message += "- **[q]** Quit and fix it manually."
+        analysis = (
+            state.get("error_analysis", "")
+            or state.get("root_cause_hole", "")
+            or "No detailed error analysis was generated."
+        )
+
+        auto_fix_allowed = state.get("auto_fix_allowed", True)
+        has_rollback = bool(state.get("rollback_files", {}))
+
+        error_preview = errors[:3000]
+
+        ui_message += "### Vivado/XSim Error Analysis\n\n"
+
+        ui_message += "**Raw error:**\n"
+        ui_message += f"```text\n{error_preview}\n```\n\n"
+
+        ui_message += "**Analyzer explanation:**\n"
+        ui_message += f"{analysis}\n\n"
+
+        ui_message += "---\n\n"
+        ui_message += "**Choose next action:**\n"
+
+        if auto_fix_allowed:
+            ui_message += "- **[1]** Generate a corrected code fix based on this error analysis.\n"
+        else:
+            ui_message += "- **[1]** Not recommended: this error is probably not safe for automatic code fixing.\n"
+
+        if has_rollback:
+            ui_message += "- **[2]** Rollback to the previous code version.\n"
+        else:
+            ui_message += "- **[2]** Rollback unavailable: no checkpoint exists for this run.\n"
+
+        ui_message += "- **[q]** Quit and fix manually."
+
         return ui_message
 
     if phase == Phase.SELECT_HOLE:

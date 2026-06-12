@@ -332,12 +332,393 @@ def refine_action_plan(state: AgentState):
 # Error analysis
 # ============================================================
 
-def error_analysis(state: AgentState):
-    print("[ANALYZER]: Error detected. Preparing data for human review/generator fix.")
+def extract_relevant_error_lines(text: str, max_lines: int = 30) -> str:
+    """
+    Extracts the most relevant lines from Vivado/XSim/UVM logs.
+    Keeps the function deterministic and simple for demo stability.
+    """
+    if not text:
+        return ""
+
+    markers = [
+        "ERROR:",
+        "FATAL:",
+        "CRITICAL WARNING:",
+        "UVM_ERROR",
+        "UVM_FATAL",
+        "syntax error",
+        "Syntax error",
+        "FAILED",
+        "failed",
+        "xvlog",
+        "xelab",
+        "xsim",
+    ]
+
+    lines = text.splitlines()
+    selected = []
+
+    for i, line in enumerate(lines):
+        if any(marker in line for marker in markers):
+            start = max(0, i - 2)
+            end = min(len(lines), i + 3)
+            selected.extend(lines[start:end])
+
+    # remove duplicates, keep order
+    clean = []
+    seen = set()
+
+    for line in selected:
+        if line not in seen:
+            clean.append(line)
+            seen.add(line)
+
+    if clean:
+        return "\n".join(clean[:max_lines])
+
+    non_empty = [line for line in lines if line.strip()]
+    return "\n".join(non_empty[-max_lines:])
+
+
+def classify_vivado_error(error_text: str) -> dict:
+    """
+    Classifies the error into a small number of categories.
+    This is safer than asking the LLM to guess everything.
+    """
+    text = (error_text or "").lower()
+
+    if "not recognized" in text or "settings64.bat" in text or "vivado path" in text:
+        return {
+            "category": "SYSTEM_PATH_ERROR",
+            "auto_fix_allowed": False,
+            "recommendation": (
+                "This looks like an environment problem. Check the Vivado path, "
+                "settings64.bat, and whether xvlog/xelab/xsim are available."
+            ),
+        }
+
+    if "coverage report" in text or "xcrg" in text or "coverage report missing" in text:
+        return {
+            "category": "COVERAGE_REPORT_ERROR",
+            "auto_fix_allowed": False,
+            "recommendation": (
+                "Vivado may have run, but the coverage report was not generated or "
+                "could not be parsed. Check the xcrg command and coverage database path."
+            ),
+        }
+
+    if "xvlog" in text or "syntax error" in text or "near" in text:
+        return {
+            "category": "COMPILE_SYNTAX_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The injected SystemVerilog/UVM code likely contains a syntax error "
+                "or an invalid declaration. The generated code should be corrected."
+            ),
+        }
+
+    if "xelab" in text:
+        return {
+            "category": "ELABORATION_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The code compiled, but elaboration failed. Check class names, "
+                "factory registration, include order, top module, and UVM test names."
+            ),
+        }
+
+    if "uvm_error" in text or "uvm_fatal" in text or "mismatch" in text:
+        return {
+            "category": "SIMULATION_RUNTIME_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The simulation ran but reported a UVM/runtime failure. Check the "
+                "generated sequence/test behavior and scoreboard expectations."
+            ),
+        }
+
     return {
-        "status": Status.FAILED,
+        "category": "UNKNOWN_VIVADO_ERROR",
+        "auto_fix_allowed": True,
+        "recommendation": (
+            "The error could not be classified safely. Review the relevant Vivado/XSim "
+            "log lines and regenerate only a minimal fix."
+        ),
     }
 
+
+def guess_target_files_from_error(error_text: str, state: AgentState) -> str:
+    """
+    Guesses likely affected files using:
+    - current target_file from previous plan;
+    - // FILE markers from generated code;
+    - file names mentioned in the error.
+    """
+    known_files = [
+        "transaction.sv",
+        "sequence.sv",
+        "test.sv",
+        "subscriber.sv",
+        "monitor.sv",
+        "driver.sv",
+        "scoreboard.sv",
+        "agent.sv",
+        "environment.sv",
+        "top.sv",
+        "MakeSVfile.bat",
+    ]
+
+    text = (error_text or "").lower()
+    generated_code = state.get("generated_code", "")
+    current_target = state.get("target_file", "")
+
+    candidates = []
+
+    if current_target and "unknown" not in current_target.lower():
+        candidates.extend([f.strip() for f in current_target.split(",") if f.strip()])
+
+    for match in re.finditer(r"FILE:\s*([a-zA-Z0-9_.-]+)", generated_code):
+        candidates.append(match.group(1).strip())
+
+    for file_name in known_files:
+        if file_name.lower() in text:
+            candidates.append(file_name)
+
+    candidates = list(dict.fromkeys(candidates))
+
+    if candidates:
+        return ", ".join(candidates)
+
+    return "sequence.sv, test.sv, subscriber.sv, MakeSVfile.bat"
+
+def extract_error_file_locations(error_text: str) -> list[dict]:
+    """
+    Extracts file and line references from Vivado/XSim errors.
+
+    Example:
+    ERROR: [VRFC 10-4982] syntax error near 'start_item' [..\\TB-FIFO/sequence.sv:35]
+    """
+
+    locations = []
+
+    pattern = re.compile(
+        r"\[([^\[\]]+\.(?:sv|v|svh|vh|bat)):(\d+)\]",
+        re.IGNORECASE,
+    )
+
+    for match in pattern.finditer(error_text or ""):
+        raw_path = match.group(1).replace("\\", "/")
+        line_no = int(match.group(2))
+        file_name = os.path.basename(raw_path)
+
+        locations.append(
+            {
+                "raw_path": raw_path,
+                "file_name": file_name,
+                "line": line_no,
+            }
+        )
+
+    # remove duplicates, keep order
+    unique = []
+    seen = set()
+
+    for loc in locations:
+        key = (loc["file_name"], loc["line"])
+        if key not in seen:
+            unique.append(loc)
+            seen.add(key)
+
+    return unique
+
+
+def find_file_in_project(file_name: str) -> str:
+    """
+    Searches for a file in the configured RTL/TB/run-script directories.
+    """
+
+    bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
+
+    search_dirs = [
+        PROJECT_CONFIG.get("tb_dir", ""),
+        PROJECT_CONFIG.get("rtl_dir", ""),
+        bat_dir,
+    ]
+
+    for directory in search_dirs:
+        if not directory or not os.path.exists(directory):
+            continue
+
+        for root, _, files in os.walk(directory):
+            if file_name in files:
+                return os.path.join(root, file_name)
+
+    return ""
+
+
+def read_source_context(file_path: str, line_no: int, radius: int = 4) -> str:
+    """
+    Reads a small source-code window around the error line.
+    """
+
+    if not file_path or not os.path.exists(file_path):
+        return ""
+
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+    except Exception:
+        return ""
+
+    start = max(1, line_no - radius)
+    end = min(len(lines), line_no + radius)
+
+    context_lines = []
+
+    for idx in range(start, end + 1):
+        marker = ">>" if idx == line_no else "  "
+        code_line = lines[idx - 1].rstrip()
+        context_lines.append(f"{marker} {idx:4d}: {code_line}")
+
+    return "\n".join(context_lines)
+
+def build_source_error_context(error_text: str) -> tuple[str, str]:
+    """
+    Builds source-code context for the files and lines mentioned in Vivado errors.
+    Returns:
+    - markdown/code text for UI
+    - comma-separated target files
+    """
+
+    locations = extract_error_file_locations(error_text)
+
+    if not locations:
+        return "", ""
+
+    sections = []
+    target_files = []
+
+    for loc in locations:
+        file_name = loc["file_name"]
+        line_no = loc["line"]
+
+        # ignorăm top.sv dacă apare doar ca "ignored due to previous errors"
+        if file_name == "top.sv" and "ignored due to previous errors" in error_text.lower():
+            continue
+
+        file_path = find_file_in_project(file_name)
+        source_context = read_source_context(file_path, line_no)
+
+        target_files.append(file_name)
+
+        if source_context:
+            sections.append(
+                f"File: {file_name}, line {line_no}\n"
+                f"{source_context}"
+            )
+        else:
+            sections.append(
+                f"File: {file_name}, line {line_no}\n"
+                "Source context could not be read from disk."
+            )
+
+    target_files = list(dict.fromkeys(target_files))
+    return "\n\n".join(sections), ", ".join(target_files)
+
+
+def build_error_fix_plan(
+    category: str,
+    target_files: str,
+    recommendation: str,
+    evidence: str,
+) -> str:
+    return (
+        "SHORT_RESPONSE:\n"
+        "Vivado/XSim reported an error after the last run. The system should not "
+        "continue coverage comparison until this error is fixed.\n\n"
+
+        "ROOT_CAUSE_SUMMARY:\n"
+        f"Error category: {category}.\n"
+        f"{recommendation}\n\n"
+
+        "CHOSEN STRATEGY: TESTBENCH_WIRING_FIX\n"
+        "CODE_ACTION: MODIFY\n"
+        f"TARGET_FILES: {target_files}\n\n"
+
+        "PLANNED_CHANGE:\n"
+        "Generate the smallest correction needed to make the modified verification "
+        "environment compile and run again. The fix must target only the files related "
+        "to the last generated code or run script change.\n\n"
+
+        "EVIDENCE:\n"
+        f"{evidence[:2000]}"
+    )
+
+
+# ============================================================
+# Error analysis
+# ============================================================
+
+def error_analysis(state: AgentState):
+    print("[ANALYZER]: Error detected. Analyzing Vivado/XSim failure.")
+
+    raw_error = state.get("compilation_error", "")
+    sim_log = read_simulation_log(state.get("simulation_log_path", ""))
+
+    combined_error_text = raw_error + "\n\n" + sim_log
+    evidence = extract_relevant_error_lines(combined_error_text)
+
+    source_context, source_target_files = build_source_error_context(combined_error_text)
+
+    classification = classify_vivado_error(combined_error_text)
+    category = classification["category"]
+    recommendation = classification["recommendation"]
+    auto_fix_allowed = classification["auto_fix_allowed"]
+
+    target_files = source_target_files or guess_target_files_from_error(raw_error, state)
+
+    analysis_message = (
+        f"**Error category:** `{category}`\n\n"
+        f"**What probably went wrong:**\n"
+        f"{recommendation}\n\n"
+        f"**Likely affected files:** `{target_files}`\n\n"
+        f"**Relevant evidence from Vivado/XSim logs:**\n"
+        f"```text\n{evidence[:2000] or raw_error[:2000] or 'No detailed error lines were captured.'}\n```\n\n"
+    )
+
+    if source_context:
+        analysis_message += (
+        "**Source context around the reported error line:**\n"
+        f"```systemverilog\n{source_context[:3000]}\n```\n\n"
+        )
+
+    if auto_fix_allowed:
+        analysis_message += (
+            "**Recommended action:** let the Generator create a minimal corrected version "
+            "of the last generated code, then review it before injection."
+        )
+    else:
+        analysis_message += (
+            "**Recommended action:** fix this manually or rollback. This error is probably "
+            "not safely fixable by generated SystemVerilog code."
+        )
+
+    action_plan = build_error_fix_plan(
+        category=category,
+        target_files=target_files,
+        recommendation=recommendation,
+        evidence=(evidence + "\n\nSOURCE CONTEXT:\n" + source_context) if source_context else (evidence or raw_error),
+    )
+
+    return {
+        "root_cause_hole": analysis_message,
+        "error_analysis": analysis_message,
+        "error_category": category,
+        "auto_fix_allowed": auto_fix_allowed,
+        "action_plan": action_plan,
+        "target_file": target_files,
+        "status": Status.FAILED,
+    }
 
 # ============================================================
 # Result comparison helpers
