@@ -153,6 +153,8 @@ def clean_old_simulation_logs(working_dir: str):
         for filename in os.listdir(working_dir):
             if is_current_test_log(filename) or filename == "combined_xsim.log":
                 os.remove(os.path.join(working_dir, filename))
+            if filename.startswith("xsim") and filename.endswith(".log"):
+                os.remove(os.path.join(working_dir, filename))
 
     except Exception as e:
         print(f"[CHECKER WARNING] Could not clean old simulation logs: {e}")

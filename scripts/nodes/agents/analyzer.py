@@ -427,14 +427,24 @@ def classify_vivado_error(error_text: str) -> dict:
             ),
         }
 
-    if "uvm_error" in text or "uvm_fatal" in text or "mismatch" in text:
+    uvm_error_match = re.search(r"UVM_ERROR\s*:\s*(\d+)", error_text or "")
+    uvm_fatal_match = re.search(r"UVM_FATAL\s*:\s*(\d+)", error_text or "")
+
+    uvm_error_count = int(uvm_error_match.group(1)) if uvm_error_match else 0
+    uvm_fatal_count = int(uvm_fatal_match.group(1)) if uvm_fatal_match else 0
+
+    if (
+        uvm_error_count > 0
+        or uvm_fatal_count > 0
+        or "mismatch" in text
+    ):
         return {
             "category": "SIMULATION_RUNTIME_ERROR",
             "auto_fix_allowed": True,
             "recommendation": (
                 "The simulation ran but reported a UVM/runtime failure. Check the "
                 "generated sequence/test behavior and scoreboard expectations."
-            ),
+                ),
         }
 
     return {
@@ -789,10 +799,27 @@ def is_same_logical_hole(selected_hole: str, updated_hole: str) -> bool:
     return False
 
 
-def find_matching_hole_in_updated_list(selected_hole: str, updated_holes_list: list):
+def find_matching_hole_in_updated_list(selected_hole, updated_holes_list: list):
+    """
+    First compares by stable key, then falls back to textual description.
+    This avoids confusing holes with the same coverpoint/cross name but different instances.
+    """
+
+    if isinstance(selected_hole, dict):
+        selected_key = selected_hole.get("key", "")
+        selected_description = selected_hole.get("description", "")
+    else:
+        selected_key = ""
+        selected_description = selected_hole or ""
+
+    if selected_key:
+        for hole in updated_holes_list:
+            if hole.get("key", "") == selected_key:
+                return hole
+
     for hole in updated_holes_list:
         updated_description = hole.get("description", "")
-        if is_same_logical_hole(selected_hole, updated_description):
+        if is_same_logical_hole(selected_description, updated_description):
             return hole
 
     return None
@@ -801,7 +828,7 @@ def find_matching_hole_in_updated_list(selected_hole: str, updated_holes_list: l
 def classify_fix_result(
     old_coverage: float,
     new_coverage: float,
-    selected_hole: str,
+    selected_hole,
     previous_holes_list: list,
     updated_holes_list: list,
     holes_parse_failed: bool,
@@ -957,7 +984,8 @@ def compare_results(state: AgentState):
         state.get("previous_coverage", state.get("coverage_value", 0.0))
     )
 
-    target_hole = state.get("current_hole", {}).get("description", "")
+    target_hole_obj = state.get("current_hole", {})
+    target_hole_description = target_hole_obj.get("description", "")
     action_plan = state.get("action_plan", "")
 
     strategy = parse_action_plan_field(action_plan, "CHOSEN STRATEGY")
@@ -973,7 +1001,7 @@ def compare_results(state: AgentState):
     category, details = classify_fix_result(
         old_coverage=old_coverage,
         new_coverage=new_coverage,
-        selected_hole=target_hole,
+        selected_hole=target_hole_obj,
         previous_holes_list=previous_holes_list,
         updated_holes_list=updated_list,
         holes_parse_failed=holes_parse_failed,
@@ -982,13 +1010,13 @@ def compare_results(state: AgentState):
 
     if category == "SUCCESS_FIXED_HOLE":
         success_code = state.get("generated_code", "")
-        save_analyzer_experience(target_hole, action_plan, success_code)
+        save_analyzer_experience(target_hole_description, action_plan, success_code)
 
     analysis_result = build_detailed_result_message(
         category=category,
         old_coverage=old_coverage,
         new_coverage=new_coverage,
-        selected_hole=target_hole,
+        selected_hole=target_hole_description,
         classification_details=details,
         strategy=strategy,
         code_action=code_action,

@@ -390,6 +390,12 @@ def human_interaction_node(state: AgentState):
                     "try to fix",
                     "repair code",
                     "error analysis",
+                    "generate corrected code",
+                    "minimal correction",
+                    "minimal corrected version",
+                    "generator can create",
+                    "let the generator",
+                    "create correction",
                 ]
             )
         )
