@@ -23,9 +23,6 @@ def phase_controller_node(state: AgentState):
     status = state.get("status", Status.PROCESSING)
     cmd = state.get("user_command", "").strip().lower()
 
-    # ------------------------------------------------------------
-    # GLOBAL QUIT
-    # ------------------------------------------------------------
     if cmd in ["quit", "q", "exit", "stop"]:
         print("[PHASE CONTROLLER]: Quit requested. Ending flow.")
         return {
@@ -74,8 +71,6 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.ROLLBACK
 
     elif phase == Phase.ERROR_ANALYSIS:
-        # For now, no full automatic error repair.
-        # Show the failure/recommended rollback through PLAN_REVIEW or RESULT_REVIEW depending on your UI.
         next_phase = Phase.PLAN_REVIEW
 
     elif phase == Phase.PLAN_REVIEW:

@@ -271,6 +271,56 @@ CODE_ACTION must be exactly one of:
 Use APPEND when adding new classes or commands. Use MODIFY when changing existing classes, coverpoints, bins, crosses, monitor/driver/subscriber, or existing commands. Use NO_CODE_CHANGE when no safe code change should be generated.
 
 ============================================================
+MANDATORY PROJECT INVENTORY BEFORE STRATEGY
+============================================================
+Before choosing CHOSEN STRATEGY, you must explicitly inspect and classify the current project context.
+
+You must determine:
+
+1. EXISTING_RELEVANT_SEQUENCE:
+   - exact sequence class name if a suitable sequence already exists;
+   - or NONE if no suitable sequence exists.
+
+2. EXISTING_RELEVANT_TEST:
+   - exact test class name if a suitable test already exists and starts the relevant sequence;
+   - or NONE if no suitable test exists.
+
+3. RUN_SCRIPT_STATUS:
+   - EXECUTED if the exact UVM_TESTNAME is already present in the run script;
+   - MISSING if the test exists but the run command is missing;
+   - FAILED if the test is present in the run script but simulation log shows it failed;
+   - UNKNOWN if evidence is insufficient.
+
+Decision rules:
+- If EXISTING_RELEVANT_SEQUENCE is not NONE and EXISTING_RELEVANT_TEST is not NONE and RUN_SCRIPT_STATUS is MISSING:
+  choose ROOT_CAUSE_TYPE: MISSING_TEST_EXECUTION;
+  choose CHOSEN STRATEGY: RUN_SCRIPT_FIX;
+  choose CODE_ACTION: APPEND;
+  set TARGET_FILES to MakeSVfile.bat only.
+  Do not create a new sequence.
+  Do not create a new test.
+
+- If EXISTING_RELEVANT_SEQUENCE is not NONE and EXISTING_RELEVANT_TEST is NONE:
+  choose ROOT_CAUSE_TYPE: MISSING_TEST;
+  choose CHOSEN STRATEGY: NEW_TEST;
+  choose CODE_ACTION: APPEND;
+  set TARGET_FILES to test.sv, MakeSVfile.bat.
+  Do not create a duplicate sequence.
+
+- If EXISTING_RELEVANT_SEQUENCE is NONE and EXISTING_RELEVANT_TEST is NONE:
+  choose CHOSEN STRATEGY: NEW_SEQUENCE;
+  choose CODE_ACTION: APPEND;
+  set TARGET_FILES to sequence.sv, test.sv, MakeSVfile.bat.
+
+- If a suitable test exists and is already executed but fails:
+  do not create a duplicate sequence/test.
+  Diagnose why the existing test fails or why coverage is not saved.
+  Prefer MODIFY_EXISTING_SEQUENCE, MODIFY_EXISTING_TEST, TESTBENCH_WIRING_FIX, or NO_CHANGE_EXPLAIN depending on evidence.
+
+A failed existing test is not by itself evidence that a new sequence should be created.
+A missing run command is not evidence that stimulus is missing.
+
+============================================================
 DECISION ORDER
 ============================================================
 1. Check whether the coverage model is actionable.
@@ -334,6 +384,10 @@ EVIDENCE: <short evidence from RTL/testbench/log/run script/coverage/user feedba
 
 ROOT CAUSE ANALYSIS: <one paragraph explaining why this exact hole is not covered>
 
+EXISTING_RELEVANT_SEQUENCE: <exact class name or NONE>
+EXISTING_RELEVANT_TEST: <exact class name or NONE>
+RUN_SCRIPT_STATUS: <EXECUTED | MISSING | FAILED | UNKNOWN>
+
 CHOSEN STRATEGY: <one valid strategy>
 
 CODE_ACTION: <APPEND | MODIFY | NO_CODE_CHANGE>
@@ -382,6 +436,10 @@ REFINEMENT RULES
 8. Choose exactly one CHOSEN STRATEGY and one CODE_ACTION.
 9. Do not output NEW_SEQUENCE + NEW_TEST as a combined strategy.
 10. Use actual project files only. Never output run.sh unless the project uses it.
+11. If the user questions whether a sequence/test already exists or whether the run command is missing, re-check the existing sequence, test, and run script status before changing strategy.
+12. If the sequence and test already exist but the run command is missing, change the strategy to RUN_SCRIPT_FIX and target only MakeSVfile.bat.
+13. If the sequence exists but the test is missing, change the strategy to NEW_TEST and target test.sv and MakeSVfile.bat.
+14. If the user says "maybe the run command does not exist", treat this as a request to verify run-script execution, not as a request to create a new sequence.
 
 If the strategy changes, explain why. If the strategy remains the same, explain how the plan was corrected.
 

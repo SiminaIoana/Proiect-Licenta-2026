@@ -14,6 +14,7 @@ from utils_files.prompt_utils import safe_format
 from utils_files.coverage import (
     extract_coverage_holes,
     extract_coverage_percent,
+    build_coverage_holes_list,
     filter_log_for_hole,
 )
 from utils_files.file_ops import (
@@ -144,29 +145,19 @@ def build_holes_list(state: AgentState):
     print(f"[ANALYZER]: Current coverage score = {current_coverage}%")
 
     raw_holes = extract_coverage_holes(fcov_path)
+    holes_list = build_coverage_holes_list(fcov_path)
+
     status = Status.SUCCESS
-    holes_list = []
 
     if raw_holes.startswith("ERROR:"):
         print(f"[ANALYZER ERROR]: {raw_holes}")
         status = Status.FAILED
-
-    elif "No obvious coverage holes" in raw_holes or raw_holes.strip() == "":
-        print("[ANALYZER]: No holes found.")
         holes_list = []
 
+    elif not holes_list:
+        print("[ANALYZER]: No holes found.")
+
     else:
-        holes_lines = [
-            line.strip()
-            for line in raw_holes.split("\n")
-            if line.strip().startswith("-")
-        ]
-
-        holes_list = [
-            {"id": idx + 1, "description": line}
-            for idx, line in enumerate(holes_lines)
-        ]
-
         print(f"[ANALYZER]: Found {len(holes_list)} holes.")
 
     return {
@@ -175,7 +166,6 @@ def build_holes_list(state: AgentState):
         "coverage_value": current_coverage,
         "status": status,
     }
-
 
 # ============================================================
 # Root cause analysis
@@ -577,7 +567,9 @@ def compare_results(state: AgentState):
     print("[ANALYZER]: Comparing new FCOV report with previous state...")
 
     fcov_path = state.get("fcov_report_path", "")
+
     new_holes_str = extract_coverage_holes(fcov_path)
+    updated_list = build_coverage_holes_list(fcov_path)
 
     new_coverage = safe_float(extract_coverage_percent(fcov_path))
     old_coverage = safe_float(
@@ -595,19 +587,7 @@ def compare_results(state: AgentState):
     )
 
     previous_holes_list = state.get("holes_list", [])
-
     holes_parse_failed = new_holes_str.startswith("ERROR:")
-
-    holes_lines = [
-        line.strip()
-        for line in new_holes_str.split("\n")
-        if line.strip().startswith("-")
-    ]
-
-    updated_list = [
-        {"id": idx + 1, "description": line}
-        for idx, line in enumerate(holes_lines)
-    ]
 
     category, details = classify_fix_result(
         old_coverage=old_coverage,

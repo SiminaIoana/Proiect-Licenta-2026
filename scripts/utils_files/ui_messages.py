@@ -88,13 +88,38 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
             return ui_message
 
         ui_message += "### Coverage Analysis Results\n\n"
-        ui_message += f"The analyzer identified **{len(holes_list)}** coverage holes:\n\n"
-        ui_message += "| ID | Description |\n"
-        ui_message += "| :---: | :--- |\n"
+        ui_message += f"The analyzer identified **{len(holes_list)}** coverage holes.\n\n"
+
+        ui_message += "| ID | Source | Item | Missing |\n"
+        ui_message += "| :---: | :--- | :--- | :--- |\n"
 
         for hole in holes_list:
-            clean_desc = hole["description"].replace("\n", " ").strip()
-            ui_message += f"| **{hole['id']}** | {clean_desc} |\n"
+            hole_id = hole.get("id", "?")
+
+            cg = hole.get("covergroup_short", "unknown")
+            idx = hole.get("instance_index", "")
+            source = f"{cg}#{idx}" if idx else cg
+
+            kind = hole.get("kind", "item")
+            kind_label = "CP" if kind == "coverpoint" else "Cross" if kind == "cross" else kind
+
+            name = hole.get("name", "unknown")
+
+            expected = hole.get("expected", 0) or 0
+            uncovered = hole.get("uncovered", 0) or 0
+            bins = hole.get("bins") or []
+
+            if bins and len(bins) <= 2:
+                missing = ", ".join(bins)
+            elif bins and len(bins) > 2:
+                missing = f"{uncovered}/{expected} bins"
+            else:
+                missing = f"{uncovered}/{expected} bins"
+
+            ui_message += (
+                f"| **{hole_id}** | `{source}` | "
+                f"{kind_label} `{name}` | {missing} |\n"
+            )
 
         ui_message += "\n**Next step:**\n"
         ui_message += "- Type the **ID** of the hole you want to analyze.\n"

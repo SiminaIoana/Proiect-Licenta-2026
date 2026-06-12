@@ -172,9 +172,10 @@ with st.sidebar:
     st.subheader("Dashboard")
 
     coverage = st.session_state.state.get("coverage_value", 0.0)
-    
+    holes_list = st.session_state.state.get("holes_list", [])
 
-    st.metric("Coverage", f"{coverage}%")
+    st.metric("Global Coverage", f"{coverage}%")
+    st.metric("Uncovered Items", len(holes_list))
 
 
     # ============================================================
@@ -185,34 +186,35 @@ with st.sidebar:
     if current_hole:
         st.divider()
         st.subheader("Current Target Hole")
-        st.markdown(
-            f"""
-            <div style="
-                padding: 8px 10px;
-                margin-bottom: 6px;
-                border-radius: 8px;
-                border: 1px solid rgba(180,180,180,0.3);
-                background-color: rgba(128,128,128,0.08);
-            ">
-                <span style="font-size: 0.85rem;">{current_hole.get("description", "")}</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
 
+        selected_display = current_hole.get(
+        "display",
+        current_hole.get("description", "Selected coverage hole")
+    )
+
+        st.markdown(f"**{selected_display}**")
+
+        with st.expander("Technical coverage details", expanded=False):
+            st.code(current_hole.get("description", ""), language="text")
     # ============================================================
     # ---------------- COVERAGE HOLES RAW VIEW -------------------
     # ============================================================
     coverage_holes = st.session_state.state.get("coverage_holes", "")
 
     st.divider()
-    st.subheader("Coverage Holes")
+    st.subheader("Coverage Report Summary")
 
-    if coverage_holes:
-        st.markdown("**Raw analyzer extraction:**")
-        st.code(coverage_holes, language="text")
+    holes_list = st.session_state.state.get("holes_list", [])
+    coverage_holes = st.session_state.state.get("coverage_holes", "")
+
+    if holes_list:
+        st.caption(f"{len(holes_list)} uncovered coverage item(s) found.")
     else:
         st.caption("No coverage holes extracted yet.")
+
+    if coverage_holes:
+        with st.expander("View raw technical extraction", expanded=False):
+            st.code(coverage_holes, language="text")
 
     # ============================================================
     # ---------------- CURRENT HOLES LIST ------------------------
@@ -225,7 +227,8 @@ with st.sidebar:
     if holes_list:
         for hole in holes_list:
             hole_id = hole.get("id", "?")
-            desc = hole.get("description", "")
+            display = hole.get("display", hole.get("description", ""))
+            
 
             st.markdown(
                 f"""
@@ -237,24 +240,13 @@ with st.sidebar:
                     background-color: rgba(128,128,128,0.08);
                 ">
                     <b>ID {hole_id}</b><br>
-                    <span style="font-size: 0.85rem;">{desc}</span>
+                    <span style="font-size: 0.85rem;">{display}</span>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
     else:
         st.caption("No current coverage holes available.")
-
-    # ============================================================
-    # ---------------- LAST RESULT SUMMARY -----------------------
-    # ============================================================
-    root_cause_result = st.session_state.state.get("root_cause_hole", "")
-
-    if root_cause_result:
-        st.divider()
-        st.subheader("Last Analysis / Result")
-        with st.expander("View details", expanded=False):
-            st.markdown(root_cause_result)
 
 
 # ============================================================
