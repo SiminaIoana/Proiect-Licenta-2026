@@ -29,3 +29,4 @@ class Phase(str, Enum):
     
     DONE = "DONE"
 
+    DUT_CHANGE_ANALYSIS = "DUT_CHANGE_ANALYSIS"

@@ -48,3 +48,6 @@ class AgentState(TypedDict):
     error_category:             str
     error_analysis:             str
     auto_fix_allowed:           bool
+
+    new_dut_specs: str
+    dut_change_analysis_result: str

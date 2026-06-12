@@ -30,6 +30,7 @@ from prompts.analyzer_prompt import (
     ANALYZER_SYSTEM_PROMPT,
     ANALYZER_ROOT_CAUSE_PROMPT,
     ANALYZER_PLAN_REFINEMENT_PROMPT,
+    ANALYZER_DUT_CHANGE_IMPACT_PROMPT,
 )
 
 
@@ -55,6 +56,9 @@ def analyzer_node(state: AgentState):
 
     if phase == Phase.COMPARE_RESULTS:
         return compare_results(state)
+    
+    if phase == Phase.DUT_CHANGE_ANALYSIS:
+        return dut_change_impact_analysis(state)
 
     print(f"[ANALYZER ERROR] Unknown phase: {phase}")
     return {"status": Status.FAILED}
@@ -1030,5 +1034,71 @@ def compare_results(state: AgentState):
         "root_cause_hole": analysis_result,
         "coverage_value": new_coverage,
         "previous_coverage": new_coverage,
+        "status": Status.SUCCESS,
+    }
+
+
+
+# ============================================================
+# DUT change impact analysis
+# ============================================================
+
+def dut_change_impact_analysis(state: AgentState):
+    """
+    Analysis-only feature.
+
+    This function does not generate code, does not inject code,
+    and does not run Vivado. It only explains what parts of the
+    UVM testbench may need to be updated after a DUT modification.
+    """
+
+    print("[ANALYZER]: Running DUT change impact analysis...")
+
+    llm = Settings.llm
+    encoding = tiktoken.get_encoding("cl100k_base")
+    start_time = time.time()
+
+    new_dut_specs = state.get("new_dut_specs", "")
+    old_dut_specs = state.get("dut_specs", "")
+    uvm_rules = state.get("uvm_rules", "")
+
+    rtl_code = read_rtl(PROJECT_CONFIG.get("rtl_dir", ""))
+    env_code = read_env(PROJECT_CONFIG.get("tb_dir", ""))
+    run_script = read_run_script(PROJECT_CONFIG.get("bat_file_path", ""))
+
+    prompt = safe_format(
+    ANALYZER_DUT_CHANGE_IMPACT_PROMPT,
+    old_dut_specs=old_dut_specs,
+    new_dut_specs=new_dut_specs,
+    rtl_code=rtl_code,
+    env_code=env_code,
+    run_script=run_script,
+    uvm_rules=uvm_rules,
+)
+
+    full_prompt = ANALYZER_SYSTEM_PROMPT + "\n\n" + prompt
+
+    response = llm.complete(full_prompt)
+    response_text = response.text.strip()
+
+    prompt_tokens = len(encoding.encode(full_prompt))
+    response_tokens = len(encoding.encode(response_text))
+    duration = round(time.time() - start_time, 2)
+
+    save_agent_metrics(
+        agent_name="analyzer",
+        phase=str(state.get("phase", "")),
+        hole_description="DUT change impact analysis",
+        prompt_tokens=prompt_tokens,
+        response_tokens=response_tokens,
+        total_tokens=prompt_tokens + response_tokens,
+        duration_seconds=duration,
+        status=Status.SUCCESS.value,
+        notes="analysis_only=true",
+    )
+
+    return {
+        "dut_change_analysis_result": response_text,
+        "root_cause_hole": response_text,
         "status": Status.SUCCESS,
     }

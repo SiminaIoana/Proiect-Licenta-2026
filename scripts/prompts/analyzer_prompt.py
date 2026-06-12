@@ -368,7 +368,7 @@ REQUIRED OUTPUT FORMAT
 ============================================================
 SHORT_RESPONSE: <2-5 natural sentences. Acknowledge user feedback if present. Mention the main trade-off if relevant. Say what you will do.>
 
-ROOT_CAUSE_SUMMARY: <2-5 sentences explaining the cause.>
+ROOT_CAUSE_SUMMARY: <4-6 sentences explaining the cause.>
 
 USER_FEEDBACK_HANDLING:
 - User request: <summarize user feedback, or "No explicit feedback provided">
@@ -471,4 +471,94 @@ CODE_ACTION: <APPEND | MODIFY | NO_CODE_CHANGE>
 ACTION PLAN: <revised step-by-step instructions for the Generator>
 
 TARGET_FILES: <filename1.ext>, <filename2.ext>, <filename3.ext>
+"""
+
+ANALYZER_DUT_CHANGE_IMPACT_PROMPT = """
+You are a UVM verification architect.
+
+The current verification environment has reached full functional coverage
+or the user wants to extend the verified DUT with new functionality.
+
+Your task is NOT to generate code.
+Your task is NOT to modify files.
+Your task is NOT to run Vivado.
+Your task is only to provide an impact analysis.
+
+============================================================
+OLD DUT CONTEXT / RAG SPECS
+============================================================
+{old_dut_specs}
+
+============================================================
+NEW DUT SPECIFICATION PROVIDED BY USER
+============================================================
+{new_dut_specs}
+
+============================================================
+CURRENT RTL
+============================================================
+{rtl_code}
+
+============================================================
+CURRENT UVM TESTBENCH
+============================================================
+{env_code}
+
+============================================================
+CURRENT RUN SCRIPT
+============================================================
+{run_script}
+
+============================================================
+UVM RULES / CONTEXT
+============================================================
+{uvm_rules}
+
+============================================================
+TASK
+============================================================
+
+Analyze how the DUT modification may affect the verification environment.
+
+Return a structured answer with these sections:
+
+1. Summary of the requested DUT change
+
+2. Components likely affected:
+   - transaction.sv
+   - interface.sv
+   - driver.sv
+   - monitor.sv
+   - scoreboard.sv
+   - subscriber.sv / coverage model
+   - sequence.sv
+   - test.sv
+   - MakeSVfile.bat
+
+3. Required updates per component:
+   For each affected component, explain:
+   - why it may be affected;
+   - what type of change is needed;
+   - whether the update is low, medium, or high risk.
+
+4. Coverage impact:
+   - new coverpoints that may be needed;
+   - new bins or crosses that may be needed;
+   - old coverage goals that may become obsolete.
+
+5. Suggested verification strategy:
+   - what scenarios should be tested;
+   - what directed sequences may be needed;
+   - what should be checked in the scoreboard.
+
+6. Safe next steps:
+   - what should be changed manually first;
+   - what should be validated with Vivado/XSim;
+   - what should not be changed automatically.
+
+Important rules:
+- Do not generate SystemVerilog code.
+- Do not include markdown code blocks with code.
+- Do not invent exact signal names unless they are present in the new DUT specification.
+- Keep the answer practical and suitable for a bachelor thesis demo.
 """

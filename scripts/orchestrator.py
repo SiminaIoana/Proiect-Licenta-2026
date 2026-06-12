@@ -69,6 +69,11 @@ def phase_controller_node(state: AgentState):
             next_phase = Phase.PLAN_REFINEMENT
         elif cmd == "rollback":
             next_phase = Phase.ROLLBACK
+        elif cmd == "dut_change_analysis":
+            next_phase = Phase.DUT_CHANGE_ANALYSIS
+
+    elif phase == Phase.DUT_CHANGE_ANALYSIS:
+        next_phase = Phase.RESULT_REVIEW
 
     elif phase == Phase.ERROR_ANALYSIS:
         next_phase = Phase.PLAN_REVIEW
@@ -128,7 +133,8 @@ def route_from_phase_controller(state: AgentState):
         Phase.ROOT_CAUSE_ANALYSIS,
         Phase.COMPARE_RESULTS,
         Phase.PLAN_REFINEMENT,
-        Phase.ERROR_ANALYSIS
+        Phase.ERROR_ANALYSIS,
+        Phase.DUT_CHANGE_ANALYSIS
     ]:
         return "analyzer"
 
@@ -223,6 +229,8 @@ def build_and_run():
         "error_category": "",
         "error_analysis": "",
         "auto_fix_allowed": False,
+        "new_dut_specs": "",    
+        "dut_change_analysis_result": "",
     }
     print("\n============= START LANGRGRAPH SYSTEM ===============\n")
   

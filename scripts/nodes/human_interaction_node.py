@@ -823,6 +823,72 @@ def human_interaction_node(state: AgentState):
     # RESULT_REVIEW
     # ------------------------------------------------------------
     if phase == Phase.RESULT_REVIEW:
+        # Full coverage optional branch: DUT change impact analysis.
+        coverage_value = state.get("coverage_value", 0.0)
+        holes_list = state.get("holes_list", [])
+
+        try:
+            coverage_float = float(coverage_value)
+        except Exception:
+            coverage_float = 0.0
+
+        full_coverage_reached = coverage_float >= 100.0 and not holes_list
+
+        dut_change_request = (
+            raw_lower == "1"
+            or raw_lower.startswith("dut:")
+            or raw_lower.startswith("modify dut:")
+            or raw_lower.startswith("change dut:")
+            or contains_any(
+                raw_text,
+                [
+                    "modify dut",
+                    "change dut",
+                    "new dut",
+                    "dut change",
+                    "updated dut",
+                    "new specifications",
+                    "new dut specs",
+                    "add functionality",
+                    "add new functionality",
+                    "extend dut",
+                ],
+            )
+        )
+
+        if full_coverage_reached:
+            if raw_lower == "q" or has_word(raw_text, ["quit", "exit", "stop"]):
+                result["user_command"] = "quit"
+                result["user_feedback"] = ""
+                return result
+
+            if dut_change_request:
+                result["user_command"] = "dut_change_analysis"
+
+                # If the user typed only "1", ask them to provide specs.
+                # But because we avoid extra UI phases, we give an instruction message.
+                if raw_lower == "1":
+                    result["ui_message"] = (
+                        "Please describe the DUT modification using this format:\n\n"
+                        "`dut: describe the new DUT functionality here`\n\n"
+                        "Example:\n"
+                        "`dut: FIFO depth changes to 16 and almost_full/almost_empty signals are added`"
+                    )
+                    result["user_command"] = ""
+                    return result
+
+                result["new_dut_specs"] = raw_text
+                result["user_feedback"] = ""
+                return result
+
+            result["ui_message"] = (
+                "Full coverage was reached.\n\n"
+                "Please type:\n"
+                "`dut: describe the new DUT functionality`\n\n"
+                "or type **q** to quit."
+            )
+            return result
+
         # Clear deterministic commands first.
         success_fixed = is_success_fixed_hole_result(state)
         if success_fixed:

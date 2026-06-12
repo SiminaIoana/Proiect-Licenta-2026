@@ -187,8 +187,27 @@ def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: st
 
         if coverage >= 100.0 and not holes_list:
             ui_message += "**Target reached. Full coverage achieved.**\n\n"
+
+            if state.get("dut_change_analysis_result", ""):
+                ui_message += "### DUT Change Impact Analysis\n\n"
+                ui_message += f"{state.get('dut_change_analysis_result', '')}\n\n"
+                ui_message += "---\n\n"
+
+            ui_message += "**Optional experimental feature:**\n"
+            ui_message += (
+                "You can describe a future DUT modification, and the system will suggest "
+                "which UVM testbench components should be updated.\n\n"
+            )
+
+            ui_message += "**Example input:**\n"
+            ui_message += (
+                "`dut: FIFO depth changes to 16 and new almost_full/almost_empty signals are added`\n\n"
+            )
+
             ui_message += "**What would you like to do next?**\n"
+            ui_message += "- **[1]** Start DUT change impact analysis.\n"
             ui_message += "- **[q]** Quit."
+
             return ui_message
 
         if success_fixed:
