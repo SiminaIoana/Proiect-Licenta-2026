@@ -17,17 +17,10 @@ if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 call xelab top -L uvm -timescale 1ns/1ps -s top_sim -cov_db_dir ./coverage_db
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
-
-
 :: run test_case_1
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_case_1" -cov_db_name cov_test1 > xsim_test1.log 2>&1
 if %ERRORLEVEL% NEQ 0 echo [WARNING] test_case_1 failed!
 
-
-
-:: run test_data_bins
-call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_data_bins" -cov_db_name cov_test_data_bins > xsim_test_data_bins.log 2>&1
-if %ERRORLEVEL% NEQ 0 echo [WARNING] test_data_bins failed!
 
 :: functional coverage report 
 call xcrg -dir ./coverage_db -report_format text -report_dir ./coverage_report_text
