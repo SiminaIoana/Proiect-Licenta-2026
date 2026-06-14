@@ -16,7 +16,6 @@ class base_sequence extends uvm_sequence#(transaction);
 endclass
 
 
-
 /*-------------------------------------------------------------*/
 /*-------------------------SEQUENCE_1--------------------------*/
 /*-------------------------------------------------------------*/
@@ -34,8 +33,8 @@ class sequence_1 extends base_sequence;
          trans=transaction::type_id::create("trans");
          start_item(trans);
          trans.randomize with {
+                              re==0;
                               we==1;
-                              re dist {0:=4, 1:=1};
                                  };
          finish_item(trans);
          `uvm_info("SEQUENCE_TRANSACTION_COUNT","",UVM_NONE);
@@ -43,8 +42,6 @@ class sequence_1 extends base_sequence;
       
    endtask
 endclass
-
-
 `endif
 
 

@@ -47,23 +47,35 @@ def initialize_llm():
             timeout=float(os.getenv("HF_TIMEOUT", "300")),
             max_retries=1,
         )
-    elif provider == "ollama":
-        ollama_model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
-
+    elif provider == "gemini":
         llm = OpenAILike(
-            model=ollama_model,
-            api_key="ollama",
-            api_base="http://localhost:11434/v1",
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            api_key=os.getenv("GEMINI_API_KEY"),
+            api_base="https://generativelanguage.googleapis.com/v1beta/openai/",
             is_chat_model=True,
             temperature=0.2,
-            max_tokens=int(os.getenv("OLLAMA_MAX_TOKENS", "1000")),
-            context_window=int(os.getenv("OLLAMA_CONTEXT_WINDOW", "4096")),
-
-            # Timeout mai mare pentru că Ollama local răspunde mai greu.
-            timeout=float(os.getenv("OLLAMA_TIMEOUT", "300")),
+            max_tokens=int(os.getenv("GEMINI_MAX_TOKENS", "8192")),
+            context_window=int(os.getenv("GEMINI_CONTEXT_WINDOW", "1048576")),
+            timeout=float(os.getenv("GEMINI_TIMEOUT", "300")),
             max_retries=1,
         )
+    elif provider == "mistral":
+        mistral_api_key = os.getenv("MISTRAL_API_KEY")
 
+        if not mistral_api_key:
+            raise ValueError("Missing MISTRAL_API_KEY in .env")
+
+        llm = OpenAILike(
+            model=os.getenv("MISTRAL_MODEL", "mistral-small-latest"),
+            api_key=mistral_api_key,
+            api_base="https://api.mistral.ai/v1",
+            is_chat_model=True,
+            temperature=0.2,
+            max_tokens=int(os.getenv("MISTRAL_MAX_TOKENS", "8192")),
+            context_window=int(os.getenv("MISTRAL_CONTEXT_WINDOW", "262144")),
+            timeout=float(os.getenv("MISTRAL_TIMEOUT", "300")),
+            max_retries=1,
+        )
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {provider}")
 
@@ -81,4 +93,13 @@ def initialize_llm():
         print(f"[CONFIG] Ollama context_window: {os.getenv('OLLAMA_CONTEXT_WINDOW', '4096')}")
         print(f"[CONFIG] Ollama max_tokens: {os.getenv('OLLAMA_MAX_TOKENS', '1000')}")
 
+    if provider == "gemini":
+        print(f"[CONFIG] Gemini model: {os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')}")
+        print(f"[CONFIG] Gemini context_window: {os.getenv('GEMINI_CONTEXT_WINDOW', '1048576')}")
+        print(f"[CONFIG] Gemini max_tokens: {os.getenv('GEMINI_MAX_TOKENS', '8192')}")
+
+    if provider == "mistral":
+        print(f"[CONFIG] Mistral model: {os.getenv('MISTRAL_MODEL', 'mistral-small-latest')}")
+        print(f"[CONFIG] Mistral context_window: {os.getenv('MISTRAL_CONTEXT_WINDOW', '262144')}")
+        print(f"[CONFIG] Mistral max_tokens: {os.getenv('MISTRAL_MAX_TOKENS', '8192')}")
     return llm

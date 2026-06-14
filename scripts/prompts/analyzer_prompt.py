@@ -197,6 +197,65 @@ For FIFO-like DUTs:
 Do not claim that a bin will be hit unless the directed transaction is accepted by the DUT and observable by the monitor/subscriber.
 
 ============================================================
+STATUS SIGNAL / TIMING / SAMPLING DIAGNOSTIC RULE
+============================================================
+For coverage holes related to DUT status signals, do not assume that missing stimulus is the only possible cause.
+
+Status-related holes include, but are not limited to:
+- full_cp
+- empty_cp
+- almost_full_cp
+- almost_empty_cp
+- overflow
+- underflow
+- write_protocol_cross
+- read_protocol_cross
+- any cross involving full, empty, almost_full, almost_empty, read, write, overflow, or underflow.
+
+Before choosing a strategy for a status-related hole, analyze all of the following:
+
+1. DUT status behavior:
+   - how the DUT computes the status signal;
+   - whether the status signal is combinational or registered;
+   - whether the status signal becomes visible in the same cycle or one cycle later;
+   - whether the DUT blocks writes when full or reads when empty.
+
+2. Driver timing:
+   - which clock edge the driver uses;
+   - whether the driver uses a clocking block;
+   - whether assignments are nonblocking and therefore visible after the clock edge.
+
+3. Monitor timing:
+   - which clock edge the monitor uses;
+   - whether the monitor samples on the same edge as the driver;
+   - whether the monitor may sample before the DUT/status signal becomes stable;
+   - whether the monitor needs one or more hold/no-op cycles to observe the target state.
+
+4. Interface / clocking block:
+   - inspect driver_cb and monitor_cb if present;
+   - if driver and monitor use the same edge and the hole is a status signal, mention a possible sampling race;
+   - do not immediately modify the clocking block unless evidence suggests a sampling issue.
+
+5. Subscriber / coverage sampling:
+   - verify that the monitor assigns the relevant transaction field;
+   - verify that the subscriber samples after the transaction is fully populated;
+   - verify that the coverpoint samples the observed transaction field, not the attempted sequence item.
+
+6. Simulation log evidence:
+   - if the log shows that the target scenario never appeared, prioritize stimulus or test execution;
+   - if the log shows that the target scenario appeared but coverage did not update, prioritize monitor/subscriber/sampling analysis;
+   - if evidence is insufficient, state what should be checked.
+
+Important FIFO rule:
+For full_cp.is_full, the goal is to intentionally reach and observe full=1. Do not propose interleaved reads before full is observed. A safe plan should use enough consecutive writes with re=0, then one or more hold/no-op cycles if needed so the monitor/subscriber can sample full=1.
+
+For write_protocol_cross.write_full, the goal is not only to fill the FIFO, but also to attempt a write while full is already asserted. First reach full, then keep we=1 and re=0 long enough for the write-full scenario to be observed.
+
+For read_protocol_cross or read-while-empty scenarios, first reach empty, then attempt a read while empty is already asserted.
+
+If a sequence appears logically correct but the coverage hole remains uncovered, do not create another similar sequence immediately. Consider whether the issue is caused by monitor timing, clocking block sampling, subscriber sampling, test ending too early, or run-script execution.
+
+============================================================
 AUTOMATIC VS EXPLICIT BIN RULE
 ============================================================
 If a coverage hole is reported only with automatic/tool-generated names such as ranges[1], bins[2], or auto[3], and the report does not show exact value intervals:
@@ -344,11 +403,24 @@ DECISION ORDER
 3. Check whether the existing sequence is baseline.
    - If baseline and the scenario is directed/distinct, prefer NEW_SEQUENCE.
    - This rule does not apply when a suitable non-baseline directed sequence/test already exists and only the run command is missing.
-.
-4. Check stimulus acceptance.
-   - Do not propose writes that exceed DUT capacity.
-   - Add reads/batches/drain when required.
-5. Choose exactly one strategy and one code action.
+
+4. For status-related holes, check timing and sampling before assuming missing stimulus.
+   - Analyze DUT status computation.
+   - Analyze driver timing.
+   - Analyze monitor sampling.
+   - Analyze interface clocking blocks.
+   - Analyze subscriber sampling.
+   - If the sequence should have created the scenario but the monitor/subscriber may not observe it, consider MONITOR_OR_DRIVER_TIMING_ERROR and TESTBENCH_WIRING_FIX.
+   - If the sequence ends too early, prefer MODIFY_EXISTING_SEQUENCE or NEW_SEQUENCE with hold/no-op cycles.
+   - If the run command is missing, prefer RUN_SCRIPT_FIX.
+
+5. Check stimulus acceptance.
+   - Do not propose writes that exceed DUT capacity unless the selected coverage goal intentionally requires reaching full or write-while-full.
+   - For full/status coverage, reaching full is intentional. Do not add reads before the target full condition is observed.
+   - For data-bin coverage, ensure directed values are accepted and sampled.
+   - Add reads/batches/drain only when they do not prevent the target coverage condition.
+
+6. Choose exactly one strategy and one code action.
 
 ============================================================
 OUTPUT RULES
@@ -368,7 +440,7 @@ REQUIRED OUTPUT FORMAT
 ============================================================
 SHORT_RESPONSE: <2-5 natural sentences. Acknowledge user feedback if present. Mention the main trade-off if relevant. Say what you will do.>
 
-ROOT_CAUSE_SUMMARY: <4-6 sentences explaining the cause.>
+ROOT_CAUSE_SUMMARY: <4-6 sentences explaining the most likely cause. Mention whether the issue is missing stimulus, missing execution, timing/sampling, coverage model logic, RTL behavior, or uncertain.>
 
 USER_FEEDBACK_HANDLING:
 - User request: <summarize user feedback, or "No explicit feedback provided">
@@ -376,13 +448,23 @@ USER_FEEDBACK_HANDLING:
 - Reason: <why>
 - Plan impact: <how the plan changes, or "No impact">
 
+DIAGNOSTIC_ANALYSIS:
+- Coverage model: <what is sampled and whether the bins/cross are actionable>
+- Stimulus: <whether current sequences generate the required scenario>
+- DUT behavior: <how the DUT should produce the relevant signal/state>
+- Driver timing: <how stimulus is driven and whether timing may matter>
+- Monitor sampling: <how the monitor observes the signal and whether sampling may miss it>
+- Interface / clocking blocks: <whether driver_cb/monitor_cb timing may matter>
+- Subscriber sampling: <whether the transaction field is correctly sampled by coverage>
+- Log evidence: <what the logs prove or do not prove>
+
 PLANNED_CHANGE: <what will change, whether this is MODIFY / APPEND / NO_CODE_CHANGE, and why>
 
 ROOT_CAUSE_TYPE: <one valid root cause type>
 
 EVIDENCE: <short evidence from RTL/testbench/log/run script/coverage/user feedback>
 
-ROOT CAUSE ANALYSIS: <one paragraph explaining why this exact hole is not covered>
+ROOT CAUSE ANALYSIS: <one paragraph explaining why this exact hole is not covered. If timing/sampling is relevant, explicitly explain it. If it is not relevant, explicitly say why.>
 
 EXISTING_RELEVANT_SEQUENCE: <exact class name or NONE>
 EXISTING_RELEVANT_TEST: <exact class name or NONE>
@@ -440,6 +522,10 @@ REFINEMENT RULES
 12. If the sequence and test already exist but the run command is missing, change the strategy to RUN_SCRIPT_FIX and target only MakeSVfile.bat.
 13. If the sequence exists but the test is missing, change the strategy to NEW_TEST and target test.sv and MakeSVfile.bat.
 14. If the user says "maybe the run command does not exist", treat this as a request to verify run-script execution, not as a request to create a new sequence.
+15. If the user questions timing, sampling, clocking blocks, monitor behavior, or why a status signal was not observed, do not simply regenerate the same stimulus plan. Re-analyze driver timing, monitor sampling, interface clocking blocks, subscriber sampling, DUT status behavior, and whether hold/no-op cycles are needed.
+16. For full_cp.is_full, do not propose reads before full is observed. The plan must intentionally reach and sample full=1. If the sequence already uses enough writes but coverage is still not hit, consider monitor/interface/subscriber timing before proposing another similar sequence.
+17. For write_protocol_cross.write_full, first reach full, then attempt a write while full is asserted. Do not drain the FIFO before the write-full condition is sampled.
+18. If the user says transactions are not accepted, lost, blocked, or not sampled, classify the problem as either stimulus acceptance or timing/sampling. Explain which one is more likely based on the current context.
 
 If the strategy changes, explain why. If the strategy remains the same, explain how the plan was corrected.
 
