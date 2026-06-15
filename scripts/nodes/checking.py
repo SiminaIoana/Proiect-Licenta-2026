@@ -1,7 +1,9 @@
 import os
 import re
+import shutil
 import time
 import datetime
+import glob
 import subprocess
 
 from state import AgentState
@@ -151,13 +153,26 @@ def clean_old_simulation_logs(working_dir: str):
 
     try:
         for filename in os.listdir(working_dir):
-            if is_current_test_log(filename) or filename == "combined_xsim.log":
-                os.remove(os.path.join(working_dir, filename))
-            if filename.startswith("xsim") and filename.endswith(".log"):
-                os.remove(os.path.join(working_dir, filename))
+            path = os.path.join(working_dir, filename)
+
+            if (
+                is_current_test_log(filename)
+                or filename == "combined_xsim.log"
+                or filename.startswith("xsim") and filename.endswith(".log")
+                or filename.startswith("xvlog") and filename.endswith(".log")
+                or filename.startswith("xelab") and filename.endswith(".log")
+                or filename.startswith("xcrg") and filename.endswith(".log")
+                or filename.startswith("vivado") and filename.endswith(".log")
+                or filename.startswith("vivado") and filename.endswith(".jou")
+            ):
+                try:
+                    os.remove(path)
+                    print(f"[CHECKER CLEANUP] Removed file: {path}")
+                except Exception as e:
+                    print(f"[CHECKER WARNING] Could not remove {path}: {e}")
 
     except Exception as e:
-        print(f"[CHECKER WARNING] Could not clean old simulation logs: {e}")
+        print(f"[CHECKER WARNING] Could not scan simulation directory: {e}")
 
 
 def build_combined_simulation_log(working_dir: str, raw_output: str = "") -> str:

@@ -69,7 +69,7 @@ def generator_node(state: AgentState):
                 index_exp = get_index("./results/experience_data/", "./DOCS/storage_exp/", "LTM Index")
         
                 if index_exp:
-                    query_engine = index_exp.as_query_engine(similarity_top_k=1)
+                    query_engine = index_exp.as_query_engine(similarity_top_k=3)
                     memory_response = query_engine.query(
                     f"Identify the fix for this Vivado error: {error}")
                     ltm_content = str(memory_response)

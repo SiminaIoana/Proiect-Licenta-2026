@@ -215,7 +215,7 @@ def root_cause_analysis(state: AgentState):
             if os.path.exists(ltm_path) and any(os.path.isfile(os.path.join(ltm_path, f)) for f in os.listdir(ltm_path)):
                 index_ltm = get_index(ltm_path, "../DOCS/storage_ltm_analyzer/", "Analyzer LTM")
                 if index_ltm:
-                    query_engine = index_ltm.as_query_engine(similarity_top_k=1)
+                    query_engine = index_ltm.as_query_engine(similarity_top_k=2)
                     memory_response = query_engine.query(
                     f"How did we fix a coverage hole like: {hole_description}"
                     )

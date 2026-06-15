@@ -25,10 +25,6 @@ if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_read" -cov_db_name cov_test_read > xsim_test_read.log 2>&1
 if %ERRORLEVEL% NEQ 0 echo [WARNING] test_read failed!
 
-:: run test_data_bins_cr
-call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_data_bins_cr" -cov_db_name cov_test_data_bins_cr > xsim_test_data_bins_cr.log 2>&1
-if %ERRORLEVEL% NEQ 0 echo [WARNING] test_data_bins_cr failed!
-
 :: functional coverage report 
 call xcrg -dir ./coverage_db -report_format text -report_dir ./coverage_report_text
 call xcrg -dir ./coverage_db -report_format html -report_dir ./coverage_report_html

@@ -52,8 +52,9 @@ endclass
 class test_read extends base_test;
    `uvm_component_utils(test_read)
 
-   function new(string name="test_read", uvm_component parent=null);
-      super.new(name, parent);
+
+   function new(string name="test_read",uvm_component parent=null);
+      super.new(name,parent);
    endfunction
 
    function void build_phase(uvm_phase phase);
@@ -61,32 +62,11 @@ class test_read extends base_test;
    endfunction
 
    task run_phase(uvm_phase phase);
-      sequence_read seq_h;
+      read_sequence sequence_h;
       phase.raise_objection(this);
-      seq_h = sequence_read::type_id::create("seq_h", this);
-      `uvm_info("TEST_SEQUENCE_STARTED", "Starting sequence_read", UVM_NONE);
-      seq_h.start(environment_h.agent_h.sequencer_h);
-      phase.drop_objection(this);
-   endtask
-endclass
-
-class test_data_bins_cr extends base_test;
-   `uvm_component_utils(test_data_bins_cr)
-
-   function new(string name="test_data_bins_cr", uvm_component parent=null);
-      super.new(name, parent);
-   endfunction
-
-   function void build_phase(uvm_phase phase);
-      super.build_phase(phase);
-   endfunction
-
-   task run_phase(uvm_phase phase);
-      sequence_data_bins_cr seq_h;
-      phase.raise_objection(this);
-      seq_h = sequence_data_bins_cr::type_id::create("seq_h", this);
-      `uvm_info("TEST_SEQUENCE_STARTED", "Starting sequence_data_bins_cr", UVM_NONE);
-      seq_h.start(environment_h.agent_h.sequencer_h);
+      sequence_h=read_sequence::type_id::create("sequence_h",this);
+      `uvm_info("TEST_READ_SEQUENCE_STARTED","",UVM_NONE);
+      sequence_h.start(environment_h.agent_h.sequencer_h);
       phase.drop_objection(this);
    endtask
 endclass
