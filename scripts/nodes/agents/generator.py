@@ -35,6 +35,8 @@ def generator_node(state: AgentState):
     user_command = state.get("user_command", "")
     target_file = state.get("target_file", "unknown_file.sv")
 
+    use_memory = PROJECT_CONFIG.get("use_memory", True)
+
     working_dir = os.path.dirname(PROJECT_CONFIG["bat_file_path"])
     bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
     directories_to_search = [PROJECT_CONFIG.get("tb_dir", ""), PROJECT_CONFIG.get("rtl_dir", ""), bat_dir]
@@ -58,20 +60,24 @@ def generator_node(state: AgentState):
     # --------- FIXING ERRORS ---------------
     #-----------------------------------------------
     if user_command == "fix_syntax" and error != "":
-        print(f"\n[GENERATOR]: Querying Semantic Memory (LTM) for a fix...")
         # long term memory 
         ltm_content = ""
-        try:
-            index_exp = get_index("../results/experience_data/", "../DOCS/storage_exp/", "LTM Index")
-            
-            if index_exp:
-                query_engine = index_exp.as_query_engine(similarity_top_k=1)
-                # how the probmlem was solved
-                memory_response = query_engine.query(f"Identify the fix for this Vivado error: {error}")
-                ltm_content = str(memory_response)
 
-        except Exception as e:
-            pass
+        if use_memory:
+            print(f"\n[GENERATOR]: Querying Semantic Memory (LTM) for a fix...")
+            try:
+                index_exp = get_index("./results/experience_data/", "./DOCS/storage_exp/", "LTM Index")
+        
+                if index_exp:
+                    query_engine = index_exp.as_query_engine(similarity_top_k=1)
+                    memory_response = query_engine.query(
+                    f"Identify the fix for this Vivado error: {error}")
+                    ltm_content = str(memory_response)
+
+            except Exception as e:
+                pass
+        else:
+            print("[GENERATOR INFO]: Memory disabled. Skipping syntax-fix LTM query.")  
         
         memory_section = f"\nRELEVANT PAST EXPERIENCE FOUND IN MEMORY:\n{ltm_content}\nReview this to avoid repeating the same error!\n" if ltm_content else ""
         
@@ -85,24 +91,33 @@ def generator_node(state: AgentState):
             user_feedback=feedback
         )
     
-    # ------ FIX HOLES -----
+     # ------ FIX HOLES -----
     else:
         rejected_memory = ""
-        try:
-            index_rejected = get_index("../results/LTM_rejected/", "../DOCS/storage_ltm_rejected/", "Rejected LTM")
 
-            if index_rejected:
-                query_engine = index_rejected.as_query_engine(similarity_top_k=1)
-                rejected_response = query_engine.query(
-                f"What generated code patterns were rejected or caused errors for this plan: {plan}"
+        if use_memory:
+            try:
+                index_rejected = get_index(
+                    "../results/LTM_rejected/",
+                    "../DOCS/storage_ltm_rejected/",
+                    "Rejected LTM"
                 )
-                rejected_memory = str(rejected_response)
-        except Exception as e:
-            print(f"[GENERATOR WARNING]: Rejected LTM query skipped: {e}")
-            rejected_memory = ""
 
+                if index_rejected:
+                    query_engine = index_rejected.as_query_engine(similarity_top_k=1)
+                    rejected_response = query_engine.query(
+                        f"What generated code patterns were rejected or caused errors for this plan: {plan}"
+                    )
+                    rejected_memory = str(rejected_response)
+
+            except Exception as e:
+                print(f"[GENERATOR WARNING]: Rejected LTM query skipped: {e}")
+                rejected_memory = ""
+        else:
+            print("[GENERATOR INFO]: Memory disabled. Skipping rejected-code LTM query.")
 
         print(f"[GENERATOR]: Updating '{target_file}' based on Analyzer's Action Plan...")
+
         user_prompt = safe_format(
             GENERATOR_FIX_HOLE_PROMPT,
             plan=plan,
@@ -111,7 +126,7 @@ def generator_node(state: AgentState):
             rejected_memory=rejected_memory,
             user_feedback=feedback,
             uvm_rules=uvm_rules,
-            )
+        )
     # combine user prompt with system prompt for Groq
     full_prompt = GENERATOR_SYSTEM_PROMPT + "\n\n" + user_prompt
     context_path = os.path.join(working_dir, "AI_CONTEXT.txt")

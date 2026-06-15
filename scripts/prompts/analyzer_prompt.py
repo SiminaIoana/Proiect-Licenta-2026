@@ -420,7 +420,14 @@ DECISION ORDER
    - For data-bin coverage, ensure directed values are accepted and sampled.
    - Add reads/batches/drain only when they do not prevent the target coverage condition.
 
-6. Choose exactly one strategy and one code action.
+6. Check stateful preconditions for the target coverage event.
+   - Before proposing stimulus, identify what DUT/testbench state must exist for the selected coverage event to be observed.
+   - Do not treat transactions as independent if the target event depends on previous accepted transactions, internal state, queue contents, counters, protocol state, handshake state, status flags, or sampling timing.
+   - If the target event requires a valid state, the plan must explicitly explain how that state is built before the target transaction is attempted.
+   - If multiple target events are requested, the plan must ensure that the required preconditions are still true for each target event.
+   - If a stimulus would be blocked, ignored, rejected, unsampled, or would trigger a different scenario than the selected hole, it is not a valid fix.
+
+7. Choose exactly one strategy and one code action.
 
 ============================================================
 OUTPUT RULES
@@ -474,14 +481,15 @@ CHOSEN STRATEGY: <one valid strategy>
 
 CODE_ACTION: <APPEND | MODIFY | NO_CODE_CHANGE>
 
-ACTION PLAN: <clear step-by-step instructions for the Generator>
+ACTION PLAN: <clear step-by-step instructions for the Generator. Must include the target observed event, required preconditions, setup transactions/state-building steps, target transactions, sampling/hold requirements if relevant, and run-script/test execution updates if needed.>
 
 TARGET_FILES: <filename1.ext>, <filename2.ext>, <filename3.ext>
 """
 
-
 ANALYZER_PLAN_REFINEMENT_PROMPT = """
 You are refining an existing coverage-hole action plan using user feedback.
+
+Your main goal is not only to accept or reject the feedback, but to transform it into a precise, executable verification plan. If the feedback reveals that the previous stimulus was logically invalid, the refined plan must correct the transaction order, required DUT/testbench preconditions, and sampling assumptions before the Generator writes code.
 
 Do not redo the full root cause analysis from scratch unless the feedback explicitly asks for full reanalysis. Use the current plan as the baseline. Apply the latest user feedback with highest priority.
 
@@ -514,18 +522,26 @@ REFINEMENT RULES
 4. If the user asks for a directed sequence and test, do not fall back to modifying sequence_1 just because separate seq_*.sv/test_*.sv files do not exist.
 5. If the user says the solution is unsafe, too complicated, ignores capacity, or loses packets, revise the plan so all transactions are accepted and sampled.
 6. If a stimulus plan writes more items than the DUT can accept, add reads/batches/drain or choose a dedicated sequence/test.
-7. Do not overload sequence_1 for distinct directed scenarios.
-8. Choose exactly one CHOSEN STRATEGY and one CODE_ACTION.
-9. Do not output NEW_SEQUENCE + NEW_TEST as a combined strategy.
-10. Use actual project files only. Never output run.sh unless the project uses it.
-11. If the user questions whether a sequence/test already exists or whether the run command is missing, re-check the existing sequence, test, and run script status before changing strategy.
-12. If the sequence and test already exist but the run command is missing, change the strategy to RUN_SCRIPT_FIX and target only MakeSVfile.bat.
-13. If the sequence exists but the test is missing, change the strategy to NEW_TEST and target test.sv and MakeSVfile.bat.
-14. If the user says "maybe the run command does not exist", treat this as a request to verify run-script execution, not as a request to create a new sequence.
-15. If the user questions timing, sampling, clocking blocks, monitor behavior, or why a status signal was not observed, do not simply regenerate the same stimulus plan. Re-analyze driver timing, monitor sampling, interface clocking blocks, subscriber sampling, DUT status behavior, and whether hold/no-op cycles are needed.
-16. For full_cp.is_full, do not propose reads before full is observed. The plan must intentionally reach and sample full=1. If the sequence already uses enough writes but coverage is still not hit, consider monitor/interface/subscriber timing before proposing another similar sequence.
-17. For write_protocol_cross.write_full, first reach full, then attempt a write while full is asserted. Do not drain the FIFO before the write-full condition is sampled.
-18. If the user says transactions are not accepted, lost, blocked, or not sampled, classify the problem as either stimulus acceptance or timing/sampling. Explain which one is more likely based on the current context.
+7. If user feedback indicates that the generated stimulus is logically invalid, incomplete, unsafe, blocked, not accepted, not sampled, or does not create the required DUT state, treat the feedback as plan-level feedback, not only code-level feedback.
+8. When refining the plan, explicitly identify the preconditions required for the target coverage event. The refined plan must explain:
+   - what event must be observed by the monitor/subscriber/coverage model;
+   - what DUT/testbench state must exist before that event;
+   - which previous transactions create that state;
+   - why the generated stimulus will still be valid when the target event occurs.
+9. Do not produce vague plans such as "do operation A before operation B" if the number of required preceding transactions matters. Specify the relationship between setup transactions and target transactions, for example: one setup transaction per target transaction, or enough setup transactions before a burst of target transactions.
+10. The refined plan must prevent the Generator from creating syntactically correct but logically invalid stimulus.
+11. Do not overload sequence_1 for distinct directed scenarios.
+12. Choose exactly one CHOSEN STRATEGY and one CODE_ACTION.
+13. Do not output NEW_SEQUENCE + NEW_TEST as a combined strategy.
+14. Use actual project files only. Never output run.sh unless the project uses it.
+15. If the user questions whether a sequence/test already exists or whether the run command is missing, re-check the existing sequence, test, and run script status before changing strategy.
+16. If the sequence and test already exist but the run command is missing, change the strategy to RUN_SCRIPT_FIX and target only MakeSVfile.bat.
+17. If the sequence exists but the test is missing, change the strategy to NEW_TEST and target test.sv and MakeSVfile.bat.
+18. If the user says "maybe the run command does not exist", treat this as a request to verify run-script execution, not as a request to create a new sequence.
+19. If the user questions timing, sampling, clocking blocks, monitor behavior, or why a status signal was not observed, do not simply regenerate the same stimulus plan. Re-analyze driver timing, monitor sampling, interface clocking blocks, subscriber sampling, DUT status behavior, and whether hold/no-op cycles are needed.
+20. For full_cp.is_full, do not propose reads before full is observed. The plan must intentionally reach and sample full=1. If the sequence already uses enough writes but coverage is still not hit, consider monitor/interface/subscriber timing before proposing another similar sequence.
+21. For write_protocol_cross.write_full, first reach full, then attempt a write while full is asserted. Do not drain the FIFO before the write-full condition is sampled.
+22. If the user says transactions are not accepted, lost, blocked, or not sampled, classify the problem as either stimulus acceptance or timing/sampling. Explain which one is more likely based on the current context.
 
 If the strategy changes, explain why. If the strategy remains the same, explain how the plan was corrected.
 

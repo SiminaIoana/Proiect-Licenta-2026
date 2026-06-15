@@ -205,26 +205,34 @@ def root_cause_analysis(state: AgentState):
     sim_log_filtered = filter_log_for_hole(sim_log, hole_description)
 
     # ---- SAVING EXPERIENCE -----
+    use_memory = PROJECT_CONFIG.get("use_memory", True)
+
     ltm_path = os.path.join("..", "results", "LTM_analyzer")
     past_experience = ""
 
-    try:
-        if os.path.exists(ltm_path) and any(os.path.isfile(os.path.join(ltm_path, f)) for f in os.listdir(ltm_path)):
-            index_ltm = get_index(ltm_path, "../DOCS/storage_ltm_analyzer/", "Analyzer LTM")
-            if index_ltm:
-                query_engine = index_ltm.as_query_engine(similarity_top_k=1)
-                memory_response = query_engine.query(f"How did we fix a coverage hole like: {hole_description}")
-                past_experience = str(memory_response)
-                print(f"[ANALYZER INFO]: Retrieved past experience from LTM: {past_experience}")
-        else:
-            print(f"[ANALYZER INFO]: No past experiences found in {ltm_path}. Starting from scratch.")
+    if use_memory:
+        try:
+            if os.path.exists(ltm_path) and any(os.path.isfile(os.path.join(ltm_path, f)) for f in os.listdir(ltm_path)):
+                index_ltm = get_index(ltm_path, "../DOCS/storage_ltm_analyzer/", "Analyzer LTM")
+                if index_ltm:
+                    query_engine = index_ltm.as_query_engine(similarity_top_k=1)
+                    memory_response = query_engine.query(
+                    f"How did we fix a coverage hole like: {hole_description}"
+                    )
+                    past_experience = str(memory_response)
+                    print(f"[ANALYZER INFO]: Retrieved past experience from LTM: {past_experience}")
+            else:
+                print(f"[ANALYZER INFO]: No past experiences found in {ltm_path}. Starting from scratch.")
+                past_experience = "No relevant past experience found."
+        except Exception as e:
+            print(f"[ANALYZER WARNING]: Memory indexing skipped: {e}")
             past_experience = "No relevant past experience found."
-    except Exception as e:
-        print(f"[ANALYZER WARNING]: Memory indexing skipped: {e}")
-        past_experience = "No relevant past experience found."
+    else:
+        print("[ANALYZER INFO]: Memory disabled for this experimental run.")
+        past_experience = ""
 
     memory_section = (
-        f"\nPAST SUCCESSFUL EXPERIENCE:\n{past_experience}"
+        f"\nPAST SUCCESSFUL EXPERIENCE:\n{past_experience}\n"
         if past_experience
         else ""
     )

@@ -158,8 +158,16 @@ def route_from_phase_controller(state: AgentState):
     return END
 
 def route_from_start(state: AgentState):
+    use_rag = PROJECT_CONFIG.get("use_rag", True)
+
+    if not use_rag:
+        print("[ORCHESTRATOR]: RAG disabled. Skipping RAG Builder.")
+        return "phase_controller"
+
     if not state.get("dut_specs") or not state.get("uvm_rules"):
+        print("[ORCHESTRATOR]: RAG enabled. Starting RAG Builder.")
         return "rag_builder"
+
     return "phase_controller"
 
 def route_from_human(state: AgentState):

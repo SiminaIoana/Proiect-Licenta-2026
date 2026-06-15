@@ -733,9 +733,37 @@ def human_interaction_node(state: AgentState):
                 "change strategy",
                 "not enough",
                 "not sufficient",
+                "already exists",
+                "sequence already exists",
+                "test already exists",
+                "run command is missing",
+                "missing run command",
+                "not executed",
+                "not running the test",
+               
             ]
         )
 
+        code_level_feedback = contains_any(
+            raw_text,
+            [
+                "duplicate",
+                "duplicated",
+                "xcrg",
+                "coverage report command",
+                "do not duplicate",
+                "don't duplicate",
+                "dont duplicate",
+                "append only",
+                "only append",
+                "syntax",
+                "compile",
+                "compilation",
+                "missing macro",
+                "class name",
+                "test name mismatch",
+                ]
+            )
         if approve_request:
             result["user_command"] = "approve_code"
             result["user_feedback"] = ""
@@ -761,7 +789,20 @@ def human_interaction_node(state: AgentState):
             )
 
             return result
+        if code_level_feedback:
+            result["user_feedback"] = strip_feedback_prefix(raw_text)
+            result["user_command"] = "regenerate_code"
+            result["ui_message"] = (
+                "I understand. I will regenerate the code using your feedback."
+            )
 
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_text
+            )
+
+            return result 
         if plan_level_feedback:
             result["user_feedback"] = strip_feedback_prefix(raw_text)
             result["user_command"] = "refine_plan"
@@ -810,13 +851,31 @@ def human_interaction_node(state: AgentState):
 
             return result
 
-        result["ui_message"] = (
-            "I could not clearly understand your code review decision.\n\n"
-            "Please type:\n"
-            "[1] Approve code → inject and run Vivado\n"
-            "[2] Regenerate code with feedback\n"
-            "[q] Quit"
-        )
+        routed = route_review_input_with_llm(raw_text, phase, state)
+
+        result["user_command"] = routed["user_command"]
+
+        if routed["user_command"] in ["refine_plan", "regenerate_code"]:
+            result["user_feedback"] = routed.get("user_feedback") or raw_text
+
+            if routed["user_command"] == "refine_plan":
+                result["ui_message"] = (
+                "I will use your feedback to refine the current plan before regenerating the code."
+            )
+            else:
+                result["ui_message"] = (
+                    "I will regenerate the code using your feedback."
+                )
+
+            save_negative_experience(
+                state.get("current_hole", {}).get("description", ""),
+                state.get("generated_code", ""),
+                raw_text
+            )
+
+        else:
+            result["user_feedback"] = ""
+
         return result
 
     # ------------------------------------------------------------
