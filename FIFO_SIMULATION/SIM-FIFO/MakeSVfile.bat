@@ -19,7 +19,7 @@ if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 :: run test_case_1
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_case_1" -cov_db_name cov_test1 > xsim_test1.log 2>&1
-if %ERRORLEVEL% NEQ 0 echo [WARNING] test_case_1 failed!
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 
 :: functional coverage report 
