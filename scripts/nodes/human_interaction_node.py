@@ -1,16 +1,16 @@
+import json
 from state import AgentState
-from utils_files.ui_messages import build_ui_message
-from utils_files.intent_parser import normalize_user_input
-from utils_files.injection import create_rollback_checkpoint, inject_generated_code
-from utils_files.memory import save_negative_experience
 from utils_files.phases import Phase
 from utils_files.status import Status
 from llama_index.core import Settings
-
-
-# ==========================================
-# ---------- TEXT INTENT HELPERS ----------
-# ==========================================
+from utils_files.ui_messages import build_ui_message
+from utils_files.memory import save_negative_experience
+from utils_files.intent_parser import normalize_user_input
+from utils_files.injection import create_rollback_checkpoint, inject_generated_code
+from prompts.human_interaction_feedback import (
+    HUMAN_INTERACTION_SYSTEM_PROMPT,
+    HUMAN_REVIEW_ROUTER_PROMPT
+)
 
 def normalize_text(text: str) -> str:
     return " ".join(text.lower().strip().split())
@@ -21,7 +21,6 @@ def tokenize_user_text(text: str) -> list[str]:
 
     for ch in [",", ".", "!", "?", ";", ":", "(", ")", "[", "]", "{", "}", "\"", "'"]:
         cleaned = cleaned.replace(ch, " ")
-
     return cleaned.split()
 
 
@@ -37,13 +36,7 @@ def contains_any(text: str, phrases: list[str]) -> bool:
 
 def has_concept_pair(text: str, verbs: list[str], objects: list[str]) -> bool:
     """
-    Detects intent by checking if the user used both an action verb
-    and a relevant object.
-
-    Examples:
-    - "generate the code please" -> generate + code
-    - "show me the implementation" -> show + implementation
-    - "run vivado" -> run + vivado
+    Detects intent by checking iif the input contains both an action verb and an object.
     """
     tokens = tokenize_user_text(text)
 
@@ -54,8 +47,8 @@ def has_concept_pair(text: str, verbs: list[str], objects: list[str]) -> bool:
 
 
 def strip_feedback_prefix(text: str) -> str:
+    """Strips the feedback prefix to detect the core feedback content."""
     raw = text.strip()
-
     prefixes = [
         "feedback:",
         "suggestion:",
@@ -70,7 +63,6 @@ def strip_feedback_prefix(text: str) -> str:
     ]
 
     raw_lower = raw.lower()
-
     for prefix in prefixes:
         if raw_lower.startswith(prefix):
             return raw[len(prefix):].strip()
@@ -80,7 +72,7 @@ def strip_feedback_prefix(text: str) -> str:
 
 def has_negative_or_correction_intent(text: str) -> bool:
     """
-    Detects when the user is not approving, but correcting or restricting.
+    Detects when the user is correcting or restricting.
     """
     return contains_any(
         text,
@@ -168,26 +160,7 @@ def generate_feedback_acknowledgement(raw_text: str, phase: Phase) -> str:
     """
     try:
         llm = Settings.llm
-
-        prompt = f"""
-You are an AI verification assistant.
-
-The user provided feedback during a review step.
-
-USER FEEDBACK:
-{raw_text}
-
-Write a short acknowledgement message, maximum 2 sentences.
-
-Rules:
-- Acknowledge what the user wants.
-- Say that you will revise the plan/code accordingly if it is technically valid.
-- Do not generate code.
-- Do not generate a new action plan.
-- Do not claim that the change is already done.
-- Do not mention internal phases or implementation details.
-"""
-
+        prompt = HUMAN_INTERACTION_SYSTEM_PROMPT.format(raw_text=raw_text)
         response = llm.complete(prompt)
         return response.text.strip()
 
@@ -202,14 +175,11 @@ Rules:
 def route_review_input_with_llm(raw_text: str, phase: Phase, state: AgentState) -> dict:
     """
     Uses the LLM only for routing ambiguous review input.
-
     The LLM must choose one allowed command for the current phase.
     If unsure, it must choose refine_plan.
     """
-
     try:
         llm = Settings.llm
-
         current_hole = state.get("current_hole", {}).get("description", "")
         last_result = state.get("root_cause_hole", "")
         current_plan = state.get("action_plan", "")
@@ -248,57 +218,19 @@ def route_review_input_with_llm(raw_text: str, phase: Phase, state: AgentState) 
                 "confidence": 0.0,
             }
 
-        prompt = f"""
-You are a routing classifier for a human-in-the-loop AI verification assistant.
-
-Current phase:
-{phase}
-
-Allowed commands:
-{allowed_commands}
-
-Default command if unsure:
-{default_command}
-
-User input:
-{raw_text}
-
-Current selected coverage hole:
-{current_hole}
-
-Current/previous plan:
-{current_plan}
-
-Last result or analysis:
-{last_result}
-
-Classify the user's intent.
-
-Rules:
-- Return ONLY valid JSON.
-- Do not explain.
-- The command must be one of the allowed commands.
-- If the user gives technical feedback, criticism, suggestions, constraints, doubts, or observations, choose "refine_plan".
-- If the user says the generated code should be changed because of strategy, files, protocol, coverage, sampling, latency, transactions, monitor, or testbench behavior, choose "refine_plan".
-- In RESULT_REVIEW, "try again", "retry", "fix again", or any free technical feedback means "refine_plan".
-- Choose "approve_plan" or "approve_code" only if the user clearly approves with no correction or restriction.
-- Choose "regenerate_code" only for simple code regeneration without strategy change.
-- If unsure, choose the default command.
-
-JSON schema:
-{{
-  "user_command": "...",
-  "user_feedback": "...",
-  "confidence": 0.0
-}}
-"""
+        prompt = HUMAN_REVIEW_ROUTER_PROMPT.format(
+            phase=phase,
+            allowed_commands=allowed_commands,
+            default_command=default_command,
+            raw_text=raw_text,
+            current_hole=current_hole,
+            current_plan=current_plan,
+            last_result=last_result,
+        )
 
         response = llm.complete(prompt)
         text = response.text.strip()
-
-        import json
         parsed = json.loads(text)
-
         command = parsed.get("user_command", default_command)
         feedback = parsed.get("user_feedback", raw_text)
         confidence = float(parsed.get("confidence", 0.0))
@@ -328,28 +260,26 @@ def is_success_fixed_hole_result(state: AgentState) -> bool:
     result_text = state.get("root_cause_hole", "")
     return "SUCCESS_FIXED_HOLE" in result_text
 
-# ==========================================
-# ---------- HUMAN INTERACTION ----------
-# ==========================================
 
 def human_interaction_node(state: AgentState):
+    """
+    Interprets user input and helps guide it to workflow commands.
+    The node handles hole selection, plan review, code review, result review,rollback and quit decisions. 
+    """
     phase = state.get("phase", Phase.INIT)
     status = state.get("status", Status.PROCESSING)
     errors = state.get("compilation_error", "")
-
     raw_input = state.get("ui_input", "")
+
     raw_text = raw_input.strip()
     raw_lower = normalize_text(raw_text)
-
     user_choice = normalize_user_input(raw_input, phase)
 
     print(f"[DEBUG HUMAN] phase={phase}")
     print(f"[DEBUG HUMAN] raw_input='{raw_input}'")
     print(f"[DEBUG HUMAN] normalized='{user_choice}'")
 
-    # ------------------------------------------------------------
-    # NO INPUT YET -> build UI message
-    # ------------------------------------------------------------
+    # If no input just return the current UI message.
     if not raw_text:
         ui_message = build_ui_message(state, phase, status, errors)
         return {
@@ -362,21 +292,18 @@ def human_interaction_node(state: AgentState):
         "user_feedback": state.get("user_feedback", "")
     }
 
-    # ------------------------------------------------------------
-    # GLOBAL QUIT
-    # ------------------------------------------------------------
+    # Quit command is available in all phases
     if has_word(raw_text, ["q", "quit", "exit", "stop"]):
         result["user_command"] = "quit"
         result["user_feedback"] = ""
         return result
 
-    # ------------------------------------------------------------
-    # ERROR / FAILED PLAN REVIEW
-    # ------------------------------------------------------------
+    # Error review after the plan failed
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:
         auto_fix_allowed = state.get("auto_fix_allowed", True)
         has_rollback = bool(state.get("rollback_files", {}))
 
+        # Minimal correction based on error analysis
         fix_request = (
             raw_lower == "1"
             or has_word(raw_text, ["fix", "repair", "correct", "generate"])
@@ -399,7 +326,7 @@ def human_interaction_node(state: AgentState):
                 ]
             )
         )
-
+        # Restore to previous code using ROLLBACK checkpoint
         rollback_request = (
             raw_lower == "2" 
             or has_word(raw_text, ["rollback", "restore", "revert", "undo"]) 
@@ -445,6 +372,7 @@ def human_interaction_node(state: AgentState):
 
             return result
 
+        # If the input is not clear enough to be a fix explain that
         result["ui_message"] = (
             "I could not understand the selected action.\n\n"
             "Please type:\n"
@@ -454,9 +382,7 @@ def human_interaction_node(state: AgentState):
         )
         return result
 
-    # ------------------------------------------------------------
-    # SELECT_HOLE
-    # ------------------------------------------------------------
+    # Selection de ID for the hole to analyze in the current phase
     if phase == Phase.SELECT_HOLE:
         show_list_request = (
             user_choice == "show_list"
@@ -495,12 +421,9 @@ def human_interaction_node(state: AgentState):
         )
         return result
 
-    # ------------------------------------------------------------
-    # PLAN_REVIEW
-    # ------------------------------------------------------------
+    # Approve tge plan or ask for revision sending a feedkback
     if phase == Phase.PLAN_REVIEW:
         negative_intent = has_negative_or_correction_intent(raw_text)
-
         approve_verbs = [
             "approve",
             "accept",
@@ -578,21 +501,17 @@ def human_interaction_node(state: AgentState):
             result["user_feedback"] = state.get("user_feedback", "")
             return result
 
-        # Only after all commands were checked:
-        # free text becomes technical feedback for the analyzer.
+        # Only after all commands were checked free text becomes technical feedback for the analyzer.
         feedback = strip_feedback_prefix(raw_text)
         result["user_feedback"] = feedback
         result["user_command"] = "refine_plan"
 
-        # Natural acknowledgement for the user.
+        # Natural acknowledgement for the user
         result["ui_message"] = generate_feedback_acknowledgement(raw_text, phase)
-
         print(f"[DEBUG HUMAN PLAN_REVIEW] SAVING FEEDBACK='{result['user_feedback']}'")
         return result
 
-    # ------------------------------------------------------------
-    # CODE_REVIEW
-    # ------------------------------------------------------------
+    # Approve the code or ask for changes with feedback
     if phase == Phase.CODE_REVIEW:
         negative_intent = has_negative_or_correction_intent(raw_text)
         feedback_like = is_feedback_like(raw_text)
@@ -621,6 +540,7 @@ def human_interaction_node(state: AgentState):
             "implementation",
         ]
 
+        # Explicit approval
         approve_request = (
             not negative_intent
             and not feedback_like
@@ -632,6 +552,7 @@ def human_interaction_node(state: AgentState):
             )
         )
 
+        # Explicit rejection
         reject_request = (
             raw_lower == "2"
             or has_word(raw_text, ["reject", "regenerate", "retry"])
@@ -647,6 +568,7 @@ def human_interaction_node(state: AgentState):
             )
         )
 
+        # Words used for reanalysis and refineement
         explicit_reanalysis_request = (
             has_word(raw_text, ["reanalyze", "reanalyse"])
             or contains_any(
@@ -764,11 +686,11 @@ def human_interaction_node(state: AgentState):
                 "test name mismatch",
                 ]
             )
+        
         if approve_request:
             result["user_command"] = "approve_code"
             result["user_feedback"] = ""
             result["previous_coverage"] = state.get("coverage_value", 0.0)
-
             rollback_files = create_rollback_checkpoint(state)
             result["rollback_files"] = rollback_files
 
@@ -803,6 +725,7 @@ def human_interaction_node(state: AgentState):
             )
 
             return result 
+        
         if plan_level_feedback:
             result["user_feedback"] = strip_feedback_prefix(raw_text)
             result["user_command"] = "refine_plan"
@@ -851,6 +774,7 @@ def human_interaction_node(state: AgentState):
 
             return result
 
+        # Only ambigous or natural feedback reaches the LLM router, which must choose the command based on the content.
         routed = route_review_input_with_llm(raw_text, phase, state)
 
         result["user_command"] = routed["user_command"]
@@ -878,11 +802,8 @@ def human_interaction_node(state: AgentState):
 
         return result
 
-    # ------------------------------------------------------------
-    # RESULT_REVIEW
-    # ------------------------------------------------------------
+    # Decide if the user wants to approve the result, retry with the same plan, see the holes list again, or do a rollback to previous version.
     if phase == Phase.RESULT_REVIEW:
-        # Full coverage optional branch: DUT change impact analysis.
         coverage_value = state.get("coverage_value", 0.0)
         holes_list = state.get("holes_list", [])
 
@@ -891,8 +812,8 @@ def human_interaction_node(state: AgentState):
         except Exception:
             coverage_float = 0.0
 
+        # When full coverage is reached the user may optionally describe a DUT change.
         full_coverage_reached = coverage_float >= 100.0 and not holes_list
-
         dut_change_request = (
             raw_lower == "1"
             or raw_lower.startswith("dut:")
@@ -924,8 +845,7 @@ def human_interaction_node(state: AgentState):
             if dut_change_request:
                 result["user_command"] = "dut_change_analysis"
 
-                # If the user typed only "1", ask them to provide specs.
-                # But because we avoid extra UI phases, we give an instruction message.
+                # If the user typed only numerical 1, ask them to provide specs.
                 if raw_lower == "1":
                     result["ui_message"] = (
                         "Please describe the DUT modification using this format:\n\n"
@@ -948,7 +868,7 @@ def human_interaction_node(state: AgentState):
             )
             return result
 
-        # Clear deterministic commands first.
+        # Clear deterministic commands first --> chose another hole is suggested
         success_fixed = is_success_fixed_hole_result(state)
         if success_fixed:
             if raw_lower == "1" or has_word(raw_text, ["list", "back", "another"]):
@@ -998,16 +918,16 @@ def human_interaction_node(state: AgentState):
         if routed["user_command"] == "refine_plan":
             result["user_feedback"] = routed.get("user_feedback") or raw_text
             result["ui_message"] = (
-            "I will use your feedback to refine the current plan for the same coverage hole."
+                "I will use your feedback to refine the current plan for the same coverage hole."
             )
         else:
             result["user_feedback"] = ""
 
         print(
-        f"[DEBUG HUMAN RESULT_REVIEW LLM ROUTER] "
-        f"command='{result['user_command']}', "
-        f"feedback='{result['user_feedback']}', "
-        f"confidence={routed.get('confidence')}"
+            f"[DEBUG HUMAN RESULT_REVIEW LLM ROUTER] "
+            f"command='{result['user_command']}', "
+            f"feedback='{result['user_feedback']}', "
+            f"confidence={routed.get('confidence')}"
         )
 
         return result
