@@ -2,7 +2,6 @@
 `define FIFO_MONITOR_UVM
 `include "include.sv"
 
-
 `define vintf_h vif.monitor_cb
 class monitor extends uvm_monitor;
    `uvm_component_utils(monitor)
@@ -11,11 +10,7 @@ class monitor extends uvm_monitor;
    transaction trans;
 
    uvm_analysis_port#(transaction) mon2scor;
-
-   // clock cycle contor used for log events
-   int unsigned clk_cycle_count = 0;
-
-   // statistics simulation
+   int unsigned clk_cycle_count      = 0;
    int unsigned cnt_normal_write     = 0;       // normal write packet
    int unsigned cnt_normal_read      = 0;       // normal read packet
    int unsigned cnt_simultaneous_rw  = 0;       // we and re simultan
@@ -37,11 +32,9 @@ class monitor extends uvm_monitor;
          `uvm_info("MONITOR_CONNECTION_ESTABLISHED","",UVM_NONE);
       end
 
-      // send info for CSV
       `uvm_info("MON_CSV_HEADER","PKT_ID,CLK_CYCLE,WE,RE,DATA_IN,DATA_OUT,FULL,EMPTY,STATE",UVM_NONE)
    endfunction
 
-   // getting state for transaction
    function fifo_state_e classify_transaction(transaction t);
         if (t.we == 1 && t.re == 1)
             return SIMULTANEOUS_RW;
@@ -57,7 +50,6 @@ class monitor extends uvm_monitor;
             return NO_OPERATION;
    endfunction
 
-   // intern function for updating statistics
    function void update_stats(fifo_state_e state);
         case (state)
             NORMAL_WRITE:     cnt_normal_write++;
@@ -74,10 +66,8 @@ function void log_transaction(transaction t);
    string csv_line;
    csv_line = t.to_csv_row($time);
 
-   // agent parsing the line
    `uvm_info("MON_CSV_DATA", csv_line, UVM_NONE)
 
-   // logs used for monitor every type of packet that is read or write
    case (t.fifo_state_tag)
       WRITE_WHILE_FULL: begin
          `uvm_info("MONITOR_SPECIAL_EVENT",
@@ -94,10 +84,9 @@ function void log_transaction(transaction t);
                     $sformatf("[PKT#%0d] SIMULTANEOUS_RW detected at t=%0t | we=%0b re=%0b full=%0b empty=%0b | data_in=0x%08h data_out=0x%08h",
                     t.packet_id, $time, t.we, t.re, t.full, t.empty, t.data_in, t.data_out), UVM_NONE)
       end
-      default: ; // normal tranzaction
+      default: ;
    endcase
 endfunction
-
 
 task run_phase(uvm_phase phase);
    forever begin
@@ -114,24 +103,16 @@ task run_phase(uvm_phase phase);
          trans.full     = `vintf_h.full;
          trans.empty    = `vintf_h.empty;
 
-         // classify and set the tag
          trans.fifo_state_tag = classify_transaction(trans);
-
-         // statistics
          update_stats(trans.fifo_state_tag);
-
-         //log information
          log_transaction(trans);
-
-         // send to scoreboard 
          mon2scor.write(trans);
-
       end
    end
 endtask
 
 function void report_phase(uvm_phase phase);
-   // used for monitor number of transaction
+   
    int unsigned total_transactions;
    total_transactions = cnt_normal_write + cnt_normal_read + cnt_simultaneous_rw + cnt_write_while_full + cnt_read_while_empty + cnt_no_op;
 
@@ -159,4 +140,5 @@ function void report_phase(uvm_phase phase);
       `uvm_warning("MON_COVERAGE_RISK", "SIMULTANEOUS_RW did not appear in the simualtion! Cross for we and re active should be uncovered")
 endfunction
 endclass
+
 `endif

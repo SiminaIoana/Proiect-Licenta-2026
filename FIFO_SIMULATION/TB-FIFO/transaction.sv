@@ -25,13 +25,11 @@ class transaction extends uvm_sequence_item;
    static int global_counter=0;
    int packet_id;
 
-   // fifo state
    fifo_state_e fifo_state_tag = FIFO_IDLE;
 
    constraint c_indata{data_in inside{[0:32'hFFFF_FFFF]};}
    constraint ctrl{soft re inside {0,1}; we inside {0,1};}
    
-
    `uvm_object_utils_begin(transaction)
    `uvm_field_int(re,UVM_ALL_ON)
    `uvm_field_int(we,UVM_ALL_ON)
@@ -52,7 +50,6 @@ class transaction extends uvm_sequence_item;
         global_counter++;
     endfunction
 
-   // function for logging in monitor
    function string get_state_str();
       case (fifo_state_tag)
          FIFO_IDLE:        return "IDLE";
@@ -71,8 +68,6 @@ class transaction extends uvm_sequence_item;
             packet_id, clk_time, we, re, data_in, data_out,
             full, empty, get_state_str());
     endfunction
-
 endclass
-
 
 `endif

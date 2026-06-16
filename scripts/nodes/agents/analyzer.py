@@ -5,6 +5,7 @@ import tiktoken
 
 from llama_index.core import Settings
 
+from scripts import state
 from state import AgentState
 from config import PROJECT_CONFIG
 
@@ -195,6 +196,8 @@ def root_cause_analysis(state: AgentState):
 
     specs = state.get("dut_specs", "")
     uvm_rules = state.get("uvm_rules", "")
+    print(f"dut_specs length={len(state.get('dut_specs', ''))}")
+    print(f"uvm_rules length={len(state.get('uvm_rules', ''))}")
     user_feedback = state.get("user_feedback", "")
 
     print(f"[DEBUG ANALYZER] user_feedback='{user_feedback}'")
@@ -237,6 +240,15 @@ def root_cause_analysis(state: AgentState):
         else ""
     )
 
+    rag_context_tokens = len(encoding.encode(specs)) + len(encoding.encode(uvm_rules))
+
+    print("[ANALYZER DEBUG] dut_specs chars =", len(specs))
+    print("[ANALYZER DEBUG] uvm_rules chars =", len(uvm_rules))
+    print("[ANALYZER DEBUG] rag_context_tokens in analyzer prompt =", rag_context_tokens)
+    print("[ANALYZER DEBUG] dut_specs preview:")
+    print(specs[:500])
+    print("[ANALYZER DEBUG] uvm_rules preview:")
+    print(uvm_rules[:500])
     prompt = safe_format(
         ANALYZER_ROOT_CAUSE_PROMPT,
         current_coverage=current_coverage,

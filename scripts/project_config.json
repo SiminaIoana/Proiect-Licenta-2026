@@ -7,8 +7,8 @@
     "rtl_dir": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/RTL-FIFO/",
     "tb_dir": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/TB-FIFO/",
     "bat_file_path": "C:/Users/Simina/An4/Licenta/LICENTA/FIFO_SIMULATION/SIM-FIFO/MakeSVfile.bat",
-    "use_rag": true,
-    "use_memory": true,
+    "use_rag": false,
+    "use_memory": false,
     "core_context_files": [
   "transaction.sv",
   "sequence.sv",

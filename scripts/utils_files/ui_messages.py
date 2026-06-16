@@ -33,7 +33,7 @@ def build_short_plan_view(plan: str, target: str) -> str:
     short_response = extract_plan_section(plan, "SHORT_RESPONSE")
     root_cause = extract_plan_section(plan, "ROOT_CAUSE_SUMMARY")
     planned_change = extract_plan_section(plan, "PLANNED_CHANGE")
-
+    technical_justification = extract_plan_section(plan, "TECHNICAL_JUSTIFICATION")
     strategy = extract_plan_field(plan, "CHOSEN STRATEGY")
     code_action = extract_plan_field(plan, "CODE_ACTION")
     target_files = extract_plan_field(plan, "TARGET_FILES") or target
@@ -50,7 +50,10 @@ def build_short_plan_view(plan: str, target: str) -> str:
 
     if strategy:
         msg += f"- **Strategy:** `{strategy}`\n"
-
+    if technical_justification:
+        msg += "\n\n**Technical justification:**\n"
+        msg += technical_justification
+        
     if code_action:
         msg += f"- **Code action:** `{code_action}`\n"
 

@@ -2,6 +2,7 @@
 `define FIFO_ENVIRONMENT_UVM
 
 `include "include.sv"
+
 class environment extends uvm_env;
    `uvm_component_utils(environment)
 
@@ -9,7 +10,6 @@ class environment extends uvm_env;
    subscriber subscriber_h;
    agent agent_h;
    
-
    function new(string name="environment",uvm_component parent=null);
       super.new(name,parent);
    endfunction
@@ -30,7 +30,6 @@ class environment extends uvm_env;
    task run_phase(uvm_phase phase);
       `uvm_info("ENVIRONMENT-RUN PHASE","",UVM_NONE);
    endtask
-
 endclass
 
 `endif

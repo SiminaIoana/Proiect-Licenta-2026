@@ -104,7 +104,7 @@ def generator_node(state: AgentState):
                 )
 
                 if index_rejected:
-                    query_engine = index_rejected.as_query_engine(similarity_top_k=1)
+                    query_engine = index_rejected.as_query_engine(similarity_top_k=3)
                     rejected_response = query_engine.query(
                         f"What generated code patterns were rejected or caused errors for this plan: {plan}"
                     )

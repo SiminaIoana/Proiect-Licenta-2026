@@ -2,6 +2,7 @@
 `define FIFO_DRIVER_UVM
 
 `include "include.sv"
+
 `define vintf vif.driver_cb
 class driver extends uvm_driver#(transaction);
    `uvm_component_utils(driver)
@@ -54,8 +55,6 @@ class driver extends uvm_driver#(transaction);
        if(trans.we==1) `vintf.data_in<=trans.data_in;
        else if(trans.full==1 || trans.we==0) `vintf.data_in<=32'hxxxx_xxxx;
     endtask
-
-
 endclass
 
 `endif

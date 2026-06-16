@@ -352,6 +352,23 @@ DECISION ORDER
 5. Choose exactly one strategy and one code action.
 
 ============================================================
+TECHNICAL JUSTIFICATION RULE
+============================================================
+The action plan must prove that the proposed fix is technically justified from a UVM/SystemVerilog verification perspective.
+
+Do not only say what will be changed. Explain why the selected strategy is correct.
+
+In TECHNICAL_JUSTIFICATION, mention:
+- the relevant DUT behavior or signal condition needed to hit the selected bin;
+- how the monitor/subscriber/covergroup can observe and sample that condition;
+- why the issue is caused by missing or insufficient verification stimulus, missing execution, or another verified root cause;
+- why the proposed fix should or should not modify the RTL, the coverage model, the sequence, the test, or the run script;
+- what UVM/SystemVerilog implementation rules must be respected by the Generator.
+
+If the user asks for more explanation, do not say that you will expand the analysis later.
+Write the explanation immediately inside TECHNICAL_JUSTIFICATION.
+
+============================================================
 OUTPUT RULES
 ============================================================
 - Natural language only.
@@ -385,7 +402,10 @@ EVIDENCE: <short evidence from RTL/testbench/log/run script/coverage/user feedba
 
 ROOT CAUSE ANALYSIS: <one paragraph explaining why this exact hole is not covered>
 
+TECHNICAL_JUSTIFICATION: <one paragraph explaining why the proposed fix is technically valid from a UVM/SystemVerilog verification perspective. Mention the relevant DUT condition, how it is sampled by the monitor/subscriber/covergroup, why the selected strategy is appropriate, and what implementation rules the Generator must respect. Do not describe this as a future action; write the justification now.>
+
 EXISTING_RELEVANT_SEQUENCE: <exact class name or NONE>
+
 EXISTING_RELEVANT_TEST: <exact class name or NONE>
 RUN_SCRIPT_STATUS: <EXECUTED | MISSING | FAILED | UNKNOWN>
 
@@ -441,7 +461,8 @@ REFINEMENT RULES
 12. If the sequence and test already exist but the run command is missing, change the strategy to RUN_SCRIPT_FIX and target only MakeSVfile.bat.
 13. If the sequence exists but the test is missing, change the strategy to NEW_TEST and target test.sv and MakeSVfile.bat.
 14. If the user says "maybe the run command does not exist", treat this as a request to verify run-script execution, not as a request to create a new sequence.
-
+15. If the user asks for more explanation, technical reasoning, or justification, do not describe it as a future planned change. Add or update TECHNICAL_JUSTIFICATION directly in the current plan.
+16. TECHNICAL_JUSTIFICATION must explain why the fix is valid from a UVM/SystemVerilog verification perspective, including the relevant DUT condition, coverage sampling behavior, selected strategy, and implementation rules for the Generator.
 If the strategy changes, explain why. If the strategy remains the same, explain how the plan was corrected.
 
 ============================================================
@@ -464,6 +485,8 @@ ROOT_CAUSE_TYPE: <same valid root cause type unless feedback proves otherwise>
 EVIDENCE: <evidence from current plan and feedback>
 
 ROOT CAUSE ANALYSIS: <short paragraph>
+
+TECHNICAL_JUSTIFICATION: <updated technical explanation. Do not say that the analysis will be expanded later; write the explanation directly here.>
 
 CHOSEN STRATEGY: <one valid strategy>
 

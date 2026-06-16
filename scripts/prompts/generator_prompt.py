@@ -258,13 +258,15 @@ Examples:
 
 === RESOURCE / CAPACITY / LATENCY RULE ===
 When generating repeated stimulus, consider whether the DUT accepts all generated operations.
-=== SCENARIO RULE ===
-- For valid read scenarios, write at least two item before reading from the same FIFO/queue.
-- Do not read from an empty FIFO unless the target hole is underflow/read-while-empty.
-- For full coverage, write enough items to fill the selected FIFO.
-- For overflow/write-while-full coverage, fill the FIFO first, then send at least one extra write.
-- For almost_full coverage, drive the FIFO to the almost_full threshold.
-- If there are multiple FIFOs/queues, use the same selected queue/address for the whole scenario unless the plan says otherwise.
+=== STIMULUS VALIDITY RULE ===
+- Before generating stimulus, identify the required precondition for the target coverage hole.
+- Generate only stimulus that can be accepted and observed by the DUT.
+- For normal valid scenarios, satisfy the required setup before the target operation.
+- Generate negative or illegal stimulus only if the target hole explicitly requires an error, overflow, underflow, protocol violation, or blocked-operation scenario.
+- Do not fill buffers, queues, memories, FIFOs, counters, or storage structures unless the target hole, Analyzer plan, or user feedback explicitly requires it.
+- Prefer the minimum legal number of transactions needed to reach the target scenario.
+- If the DUT uses handshakes, waits, latency, state transitions, or capacity limits, respect them.
+- If the target scenario appears impossible or illegal by design, return a ```text block explaining that no safe stimulus should be generated.
 Examples:
 - A buffer/queue/FIFO may become full and block later writes.
 - A counter may need enough cycles to reach a target value.
@@ -372,7 +374,7 @@ For explicit bins:
 - If UVM_TESTNAME=<test_name> already exists, do not generate any MakeSVfile.bat block.
 - For MakeSVfile.bat, generate only the missing xsim command for the new test.
 
-Do not duplicate existing xsim commands, test classes, sequences, covergroups or coverpoints.
+Do not duplicate existing xsim commands, UVM_TESTNAME entries, test classes, sequence classes, covergroups, coverpoints or crosses.s.
 - After the // FILE line, output ONLY the new xsim command block needed by the plan.
 - Never output a raw xsim command block without the // FILE: MakeSVfile.bat marker.
 - For MakeSVfile.bat MODIFY actions, output the corrected command block with // REPLACE_OR_ADD_COMMAND.

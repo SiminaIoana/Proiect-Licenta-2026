@@ -1,8 +1,8 @@
 `ifndef FIFO_INCLUDE_UVM
 `define FIFO_INCLUDE_UVM
+
 import uvm_pkg::*;
 `include "uvm_macros.svh"
-
 `include "defines.sv"
 `include "interface.sv"
 `include "transaction.sv"
@@ -15,6 +15,5 @@ import uvm_pkg::*;
 `include "environment.sv"
 `include "sequence.sv"
 `include "test.sv"
-
 
 `endif

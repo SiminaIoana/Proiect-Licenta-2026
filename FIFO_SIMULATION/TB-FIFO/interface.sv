@@ -2,6 +2,7 @@
 `define FIFO_INTERFACE_UVM
 
 `include "include.sv"
+
 interface fifo_intf(input logic clk,reset);
 
    logic re;
@@ -30,7 +31,6 @@ interface fifo_intf(input logic clk,reset);
       input data_in;
    endclocking
    modport monitor_mp(clocking monitor_cb,input clk,reset);
-
 endinterface
 
 `endif

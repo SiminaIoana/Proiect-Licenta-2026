@@ -7,7 +7,6 @@ bit clk;
 bit reset;
 
 fifo_intf intf_h(.clk(clk),.reset(reset));
-
 sync_fifo inst(
    .clk(clk),
    .reset(reset),
@@ -22,7 +21,6 @@ sync_fifo inst(
 initial begin
    uvm_config_db#(virtual fifo_intf)::set(null,"*","vintf",intf_h);
 end
-
 
 initial begin
    clk=0;
