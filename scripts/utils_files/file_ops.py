@@ -2,6 +2,7 @@ import os
 import re
 import glob
 from scripts.config import PROJECT_CONFIG
+
     
 # ============================================================
 # ------- FUNCTION FOR READING RTL FILES ------
@@ -198,3 +199,136 @@ def save_code(original_code: str, file_path:str) ->str:
         file.write(original_code)
     print(f"\nSystemVerilog code saved in {file_path}\n")
 
+
+def find_file_in_project(file_name: str) -> str:
+    """
+    Searches for a file in the configured RTL/TB/run-script directories.
+    """
+
+    bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
+
+    search_dirs = [
+        PROJECT_CONFIG.get("tb_dir", ""),
+        PROJECT_CONFIG.get("rtl_dir", ""),
+        bat_dir,
+    ]
+
+    for directory in search_dirs:
+        if not directory or not os.path.exists(directory):
+            continue
+
+        for root, _, files in os.walk(directory):
+            if file_name in files:
+                return os.path.join(root, file_name)
+
+    return ""
+
+def read_source_context(file_path: str, line_no: int, radius: int = 4) -> str:
+    """
+    Reads a small source-code window around the error line.
+    """
+
+    if not file_path or not os.path.exists(file_path):
+        return ""
+
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+    except Exception:
+        return ""
+
+    start = max(1, line_no - radius)
+    end = min(len(lines), line_no + radius)
+
+    context_lines = []
+
+    for idx in range(start, end + 1):
+        marker = ">>" if idx == line_no else "  "
+        code_line = lines[idx - 1].rstrip()
+        context_lines.append(f"{marker} {idx:4d}: {code_line}")
+
+    return "\n".join(context_lines)
+
+def build_source_error_context(error_text: str) -> tuple[str, str]:
+    """
+    Builds source-code context for the files and lines mentioned in Vivado errors.
+    Returns:
+    - markdown/code text for UI
+    - comma-separated target files
+    """
+
+    locations = extract_error_file_locations(error_text)
+
+    if not locations:
+        return "", ""
+
+    sections = []
+    target_files = []
+
+    for loc in locations:
+        file_name = loc["file_name"]
+        line_no = loc["line"]
+
+        # ignorăm top.sv dacă apare doar ca "ignored due to previous errors"
+        if file_name == "top.sv" and "ignored due to previous errors" in error_text.lower():
+            continue
+
+        file_path = find_file_in_project(file_name)
+        source_context = read_source_context(file_path, line_no)
+
+        target_files.append(file_name)
+
+        if source_context:
+            sections.append(
+                f"File: {file_name}, line {line_no}\n"
+                f"{source_context}"
+            )
+        else:
+            sections.append(
+                f"File: {file_name}, line {line_no}\n"
+                "Source context could not be read from disk."
+            )
+
+    target_files = list(dict.fromkeys(target_files))
+    return "\n\n".join(sections), ", ".join(target_files)
+
+
+def extract_error_file_locations(error_text: str) -> list[dict]:
+    """
+    Extracts file and line references from Vivado/XSim errors.
+
+    Example:
+    ERROR: [VRFC 10-4982] syntax error near 'start_item' [..\\TB-FIFO/sequence.sv:35]
+    """
+
+    locations = []
+
+    pattern = re.compile(
+        r"\[([^\[\]]+\.(?:sv|v|svh|vh|bat)):(\d+)\]",
+        re.IGNORECASE,
+    )
+
+    for match in pattern.finditer(error_text or ""):
+        raw_path = match.group(1).replace("\\", "/")
+        line_no = int(match.group(2))
+        file_name = os.path.basename(raw_path)
+
+        locations.append(
+            {
+                "raw_path": raw_path,
+                "file_name": file_name,
+                "line": line_no,
+            }
+        )
+
+    # remove duplicates, keep order
+    unique = []
+    seen = set()
+
+    for loc in locations:
+        key = (loc["file_name"], loc["line"])
+        if key not in seen:
+            unique.append(loc)
+            seen.add(key)
+
+    return unique

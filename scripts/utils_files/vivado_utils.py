@@ -259,3 +259,202 @@ def parse_vivado_failure(raw_output: str):
         )
 
     return errors, "Vivado Execution Error"
+
+def extract_relevant_error_lines(text: str, max_lines: int = 30) -> str:
+    """
+    Extracts the most relevant lines from Vivado/XSim/UVM logs.
+    Keeps the function deterministic and simple for demo stability.
+    """
+    if not text:
+        return ""
+
+    markers = [
+        "ERROR:",
+        "FATAL:",
+        "CRITICAL WARNING:",
+        "UVM_ERROR",
+        "UVM_FATAL",
+        "syntax error",
+        "Syntax error",
+        "FAILED",
+        "failed",
+        "xvlog",
+        "xelab",
+        "xsim",
+    ]
+
+    lines = text.splitlines()
+    selected = []
+
+    for i, line in enumerate(lines):
+        if any(marker in line for marker in markers):
+            start = max(0, i - 2)
+            end = min(len(lines), i + 3)
+            selected.extend(lines[start:end])
+
+    # remove duplicates, keep order
+    clean = []
+    seen = set()
+
+    for line in selected:
+        if line not in seen:
+            clean.append(line)
+            seen.add(line)
+
+    if clean:
+        return "\n".join(clean[:max_lines])
+
+    non_empty = [line for line in lines if line.strip()]
+    return "\n".join(non_empty[-max_lines:])
+
+def classify_vivado_error(error_text: str) -> dict:
+    """
+    Classifies the error into a small number of categories.
+    This is safer than asking the LLM to guess everything.
+    """
+    text = (error_text or "").lower()
+
+    if "not recognized" in text or "settings64.bat" in text or "vivado path" in text:
+        return {
+            "category": "SYSTEM_PATH_ERROR",
+            "auto_fix_allowed": False,
+            "recommendation": (
+                "This looks like an environment problem. Check the Vivado path, "
+                "settings64.bat, and whether xvlog/xelab/xsim are available."
+            ),
+        }
+
+    if "coverage report" in text or "xcrg" in text or "coverage report missing" in text:
+        return {
+            "category": "COVERAGE_REPORT_ERROR",
+            "auto_fix_allowed": False,
+            "recommendation": (
+                "Vivado may have run, but the coverage report was not generated or "
+                "could not be parsed. Check the xcrg command and coverage database path."
+            ),
+        }
+
+    if "xvlog" in text or "syntax error" in text or "near" in text:
+        return {
+            "category": "COMPILE_SYNTAX_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The injected SystemVerilog/UVM code likely contains a syntax error "
+                "or an invalid declaration. The generated code should be corrected."
+            ),
+        }
+
+    if "xelab" in text:
+        return {
+            "category": "ELABORATION_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The code compiled, but elaboration failed. Check class names, "
+                "factory registration, include order, top module, and UVM test names."
+            ),
+        }
+
+    uvm_error_match = re.search(r"UVM_ERROR\s*:\s*(\d+)", error_text or "")
+    uvm_fatal_match = re.search(r"UVM_FATAL\s*:\s*(\d+)", error_text or "")
+
+    uvm_error_count = int(uvm_error_match.group(1)) if uvm_error_match else 0
+    uvm_fatal_count = int(uvm_fatal_match.group(1)) if uvm_fatal_match else 0
+
+    if (
+        uvm_error_count > 0
+        or uvm_fatal_count > 0
+        or "mismatch" in text
+    ):
+        return {
+            "category": "SIMULATION_RUNTIME_ERROR",
+            "auto_fix_allowed": True,
+            "recommendation": (
+                "The simulation ran but reported a UVM/runtime failure. Check the "
+                "generated sequence/test behavior and scoreboard expectations."
+                ),
+        }
+
+    return {
+        "category": "UNKNOWN_VIVADO_ERROR",
+        "auto_fix_allowed": True,
+        "recommendation": (
+            "The error could not be classified safely. Review the relevant Vivado/XSim "
+            "log lines and regenerate only a minimal fix."
+        ),
+    }
+
+
+
+def guess_target_files_from_error(error_text: str, state: AgentState) -> str:
+    """
+    Guesses likely affected files using:
+    - current target_file from previous plan;
+    - // FILE markers from generated code;
+    - file names mentioned in the error.
+    """
+    known_files = [
+        "transaction.sv",
+        "sequence.sv",
+        "test.sv",
+        "subscriber.sv",
+        "monitor.sv",
+        "driver.sv",
+        "scoreboard.sv",
+        "agent.sv",
+        "environment.sv",
+        "top.sv",
+        "MakeSVfile.bat",
+    ]
+
+    text = (error_text or "").lower()
+    generated_code = state.get("generated_code", "")
+    current_target = state.get("target_file", "")
+
+    candidates = []
+
+    if current_target and "unknown" not in current_target.lower():
+        candidates.extend([f.strip() for f in current_target.split(",") if f.strip()])
+
+    for match in re.finditer(r"FILE:\s*([a-zA-Z0-9_.-]+)", generated_code):
+        candidates.append(match.group(1).strip())
+
+    for file_name in known_files:
+        if file_name.lower() in text:
+            candidates.append(file_name)
+
+    candidates = list(dict.fromkeys(candidates))
+
+    if candidates:
+        return ", ".join(candidates)
+
+    return "sequence.sv, test.sv, subscriber.sv, MakeSVfile.bat"
+
+
+def build_error_fix_plan(
+    category: str,
+    target_files: str,
+    recommendation: str,
+    evidence: str,
+) -> str:
+    return (
+        "SHORT_RESPONSE:\n"
+        "Vivado/XSim reported an error after the last run. The system should not "
+        "continue coverage comparison until this error is fixed.\n\n"
+
+        "ROOT_CAUSE_SUMMARY:\n"
+        f"Error category: {category}.\n"
+        f"{recommendation}\n\n"
+
+        "CHOSEN STRATEGY: TESTBENCH_WIRING_FIX\n"
+        "CODE_ACTION: MODIFY\n"
+        f"TARGET_FILES: {target_files}\n\n"
+
+        "PLANNED_CHANGE:\n"
+        "Generate the smallest correction needed to make the modified verification "
+        "environment compile and run again. The fix must target only the files related "
+        "to the last generated code or run script change.\n\n"
+
+        "EVIDENCE:\n"
+        f"{evidence[:2000]}"
+    )
+

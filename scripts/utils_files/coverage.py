@@ -41,6 +41,241 @@ def split_csv_line(line: str) -> list[str]:
     return [cell.strip() for cell in line.split(",")]
 
 
+def safe_float(value, default: float = 0.0) -> float:
+    try:
+        if value is None or value == "N/A":
+            return default
+        return float(value)
+    except Exception:
+        return default
+    
+    
+def normalize_hole_description(description: str) -> str:
+    text = (description or "").lower()
+    text = re.sub(r"^-\s*", "", text)
+    text = re.sub(r"['`\"]", "", text)
+    text = re.sub(r"[^a-z0-9_\[\]\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def extract_coverage_object(description: str) -> str:
+    quoted = re.search(r"'([^']+)'", description or "")
+    if quoted:
+        return quoted.group(1).strip().lower()
+
+    normalized = normalize_hole_description(description)
+    object_match = re.search(
+        r"\b(?:coverpoint|cross)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        normalized,
+    )
+
+    if object_match:
+        return object_match.group(1).strip().lower()
+
+    return ""
+
+
+def is_coverage_model_strategy(strategy: str) -> bool:
+    strategy_upper = (strategy or "").upper()
+    return any(
+        marker in strategy_upper
+        for marker in ["MODIFY_BINS", "MODIFY_COVERPOINT", "MODIFY_CROSS"]
+    )
+
+
+def is_same_logical_hole(selected_hole: str, updated_hole: str) -> bool:
+    selected_norm = normalize_hole_description(selected_hole)
+    updated_norm = normalize_hole_description(updated_hole)
+
+    if not selected_norm or not updated_norm:
+        return False
+
+    if selected_norm == updated_norm:
+        return True
+
+    if selected_norm in updated_norm or updated_norm in selected_norm:
+        return True
+
+    selected_object = extract_coverage_object(selected_hole)
+    updated_object = extract_coverage_object(updated_hole)
+
+    if selected_object and selected_object == updated_object:
+        return True
+
+    return False
+
+
+def find_matching_hole_in_updated_list(selected_hole, updated_holes_list: list):
+    """
+    First compares by stable key, then falls back to textual description.
+    This avoids confusing holes with the same coverpoint/cross name but different instances.
+    """
+
+    if isinstance(selected_hole, dict):
+        selected_key = selected_hole.get("key", "")
+        selected_description = selected_hole.get("description", "")
+    else:
+        selected_key = ""
+        selected_description = selected_hole or ""
+
+    if selected_key:
+        for hole in updated_holes_list:
+            if hole.get("key", "") == selected_key:
+                return hole
+
+    for hole in updated_holes_list:
+        updated_description = hole.get("description", "")
+        if is_same_logical_hole(selected_description, updated_description):
+            return hole
+
+    return None
+
+
+
+def classify_fix_result(
+    old_coverage: float,
+    new_coverage: float,
+    selected_hole,
+    previous_holes_list: list,
+    updated_holes_list: list,
+    holes_parse_failed: bool,
+    strategy: str,
+) -> tuple[str, dict]:
+    matching_hole = find_matching_hole_in_updated_list(selected_hole, updated_holes_list)
+    selected_still_present = matching_hole is not None
+
+    details = {
+        "matching_hole": matching_hole,
+        "selected_still_present": selected_still_present,
+    }
+
+    if holes_parse_failed:
+        return "UNCONFIRMED", details
+
+    previous_count = len(previous_holes_list or [])
+    updated_count = len(updated_holes_list or [])
+
+    if new_coverage < old_coverage:
+        return "REGRESSION", details
+
+    if updated_count > previous_count and selected_still_present and new_coverage <= old_coverage:
+        return "REGRESSION", details
+
+    if selected_hole and not selected_still_present:
+        return "SUCCESS_FIXED_HOLE", details
+
+    if selected_still_present and is_coverage_model_strategy(strategy):
+        return "DIAGNOSTIC_IMPROVEMENT_ONLY", details
+
+    if selected_still_present and new_coverage > old_coverage:
+        return "PARTIAL_IMPROVEMENT", details
+
+    if selected_still_present:
+        return "NOT_FIXED", details
+
+    return "UNCONFIRMED", details
+
+
+def build_detailed_result_message(
+    category: str,
+    old_coverage: float,
+    new_coverage: float,
+    selected_hole: str,
+    classification_details: dict,
+    strategy: str,
+    code_action: str,
+    target_files: str,
+    updated_holes_list: list,) -> str:
+    
+    matching_hole = classification_details.get("matching_hole")
+    selected_still_present = classification_details.get("selected_still_present")
+
+    if selected_still_present is True:
+        presence_text = "Yes"
+    elif selected_still_present is False:
+        presence_text = "No"
+    else:
+        presence_text = "Unconfirmed"
+
+    if matching_hole:
+        remaining_text = matching_hole.get("description", "")
+    elif updated_holes_list:
+        remaining_text = updated_holes_list[0].get("description", "")
+    else:
+        remaining_text = "No matching updated hole was found."
+
+    if category == "SUCCESS_FIXED_HOLE":
+        outcome = (
+            "The selected coverage hole is no longer present in the updated holes list. "
+            "The fix is confirmed for this hole."
+        )
+        recommendation = (
+            "Show the updated holes list and continue with the next remaining coverage hole."
+        )
+
+    elif category == "PARTIAL_IMPROVEMENT":
+        outcome = (
+            "Total coverage improved, but the selected coverage hole is still present."
+        )
+        recommendation = (
+            "Retry the same hole with a stronger or different strategy."
+        )
+
+    elif category == "DIAGNOSTIC_IMPROVEMENT_ONLY":
+        outcome = (
+            "The coverage model appears more readable or actionable, but the selected "
+            "logical scenario is still uncovered."
+        )
+        recommendation = (
+            "Create or modify a sequence/test to target the now-explicit uncovered bins."
+        )
+
+    elif category == "NOT_FIXED":
+        outcome = "The fix did not resolve the selected coverage hole."
+        recommendation = "Retry the same hole or choose a different strategy."
+
+    elif category == "REGRESSION":
+        outcome = "Coverage regressed or the updated holes list became worse after the fix."
+        recommendation = "Rollback to the previous code version."
+
+    else:
+        outcome = (
+            "Coverage changed, but selected hole closure could not be confirmed from "
+            "the updated holes list."
+        )
+        recommendation = (
+            "Review the generated coverage report, then retry or rollback if the result is unsafe."
+        )
+
+    changed_parts = []
+    if strategy:
+        changed_parts.append(f"- Strategy: {strategy}")
+    if code_action:
+        changed_parts.append(f"- Code action: {code_action}")
+    if target_files:
+        changed_parts.append(f"- Target files: {target_files}")
+
+    if not changed_parts:
+        changed_parts.append("- Strategy/code action/target files were not available in the action plan.")
+
+    return (
+        f"**Result category:** {category}\n\n"
+        f"**Coverage:** {old_coverage}% -> {new_coverage}%\n\n"
+        f"**Selected hole before fix:**\n"
+        f"{selected_hole or 'Unknown selected hole'}\n\n"
+        f"**Selected hole still present:** {presence_text}\n\n"
+        f"**Outcome:** {outcome}\n\n"
+        f"**What changed:**\n"
+        + "\n".join(changed_parts)
+        + "\n\n"
+        f"**Updated uncovered item to inspect:**\n"
+        f"{remaining_text}\n\n"
+        f"**Recommended next step:** {recommendation}"
+    )
+
+
+
 def extract_xcrg_section(content: str, section_name: str, next_section_name: str | None = None) -> str:
     """
     Extracts a named section from the XCRG text report.
