@@ -1,8 +1,8 @@
-
 import re
-from llama_index.core import Settings
 from config import PROJECT_CONFIG
 from utils_files.phases import Phase
+from llama_index.core import Settings
+
 
 
 def llm_intent_classifier(user_input: str, phase: Phase) -> str:
