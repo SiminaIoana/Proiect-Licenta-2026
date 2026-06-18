@@ -106,6 +106,16 @@ covergroup existing_covergroup_name(...);
 endgroup
 ```
 
+=== VIVADO / XSIM RUN SCRIPT RULES ===
+When generating changes for MakeSVfile.bat:
+- Preserve the style of the existing script.
+- Add new xsim commands before the xcrg report generation commands.
+- After every new xsim command, add:
+  if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+- Never use only echo [WARNING] after a failed xvlog, xelab, xsim, or xcrg command.
+- Do not hide failed simulations. A failed simulation must stop the script.
+- Use a unique log file name for every new test.
+- Use a unique coverage database name for every new test.
 
 Important:
 - Do not use SEARCH/REPLACE markers.
@@ -383,7 +393,7 @@ The MakeSVfile.bat command block should follow the style already present in the 
 If a new test is added, the command should generally look like:
 
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=<new_test_name>" -cov_db_name cov_<new_test_name> > xsim_<new_test_name>.log 2>&1
-if %ERRORLEVEL% NEQ 0 echo [WARNING] <new_test_name> failed!
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 === EXPECTED OUTPUT WHEN CREATING A NEW SEQUENCE AND TEST ===
 If the plan asks for a new dedicated sequence and a new test, normally output exactly these blocks:

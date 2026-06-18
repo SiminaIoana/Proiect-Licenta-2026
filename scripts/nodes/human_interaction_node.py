@@ -688,14 +688,57 @@ def human_interaction_node(state: AgentState):
             )
         
         if approve_request:
-            result["user_command"] = "approve_code"
-            result["user_feedback"] = ""
             result["previous_coverage"] = state.get("coverage_value", 0.0)
-            rollback_files = create_rollback_checkpoint(state)
-            result["rollback_files"] = rollback_files
 
-            inject_generated_code(state)
-            return result
+            try:
+                rollback_files = create_rollback_checkpoint(state)
+                result["rollback_files"] = rollback_files
+
+                inject_generated_code(state)
+
+                result["user_command"] = "approve_code"
+                result["status"] = Status.SUCCESS
+                result["ui_message"] = (
+                    "Code was approved and injected successfully. "
+                    "The simulation will be run again to validate the change."
+                )
+
+                return result
+
+            except Exception as e:
+                error_message = f"Injection failed before simulation: {e}"
+
+                print(f"[HUMAN ERROR]: {error_message}")
+
+                # Restore files immediately if injection partially modified something.
+                rollback_files = result.get("rollback_files", {})
+                for file_path, old_content in rollback_files.items():
+                    try:
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(old_content)
+                    except Exception as restore_error:
+                        print(
+                            f"[ROLLBACK WARNING]: Could not restore {file_path}: "
+                            f"{restore_error}"
+                        )
+
+                save_negative_experience(
+                    state.get("current_hole", {}).get("description", ""),
+                    state.get("generated_code", ""),
+                error_message
+                )
+
+                result["user_command"] = ""
+                result["status"] = Status.FAILED
+                result["compilation_error"] = error_message
+                result["rollback_files"] = {}
+                result["ui_message"] = (
+                    "The generated code could not be injected into the project files, "
+                    "so the previous files were restored. You can ask for code regeneration "
+                    "or plan refinement before trying again."
+                )
+
+                return result
 
         if explicit_reanalysis_request:
             result["user_command"] = "retry_same_hole"

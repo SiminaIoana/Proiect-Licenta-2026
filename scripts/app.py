@@ -9,7 +9,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 from utils_files.phases import Phase
-from scripts.utils_files.status import Status
+from utils_files.status import Status
 from scripts.state import get_initial_state
 
 # ---------------- PAGE CONFIGURATION -------------------------------

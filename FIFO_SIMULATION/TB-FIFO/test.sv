@@ -45,26 +45,5 @@ class test_case_1 extends base_test;
    endtask
 endclass
 
-class test_data_bins extends base_test;
-   `uvm_component_utils(test_data_bins)
-   
-   function new(string name="test_data_bins", uvm_component parent=null);
-      super.new(name, parent);
-   endfunction
-
-   function void build_phase(uvm_phase phase);
-      super.build_phase(phase);
-   endfunction
-
-   task run_phase(uvm_phase phase);
-      sequence_data_bins sequence_h;
-      phase.raise_objection(this);
-      sequence_h = sequence_data_bins::type_id::create("sequence_h", this);
-      `uvm_info("TEST_DATA_BINS", "Starting sequence_data_bins", UVM_NONE);
-      sequence_h.start(environment_h.agent_h.sequencer_h);
-      phase.drop_objection(this);
-   endtask
-endclass
-
 `endif
 
