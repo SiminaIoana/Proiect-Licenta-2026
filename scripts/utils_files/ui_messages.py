@@ -1,12 +1,14 @@
+import re
 from state import AgentState
 from utils_files.phases import Phase
 from utils_files.status import Status
 from utils_files.file_ops import extract_code
 
-import re
+""" UI message builder for the VerifCopilot workflow."""
 
 
 def extract_plan_field(plan: str, field_name: str) -> str:
+    """ Extract a single named filed from an action plan."""
     pattern = re.compile(
         rf"^\s*{re.escape(field_name)}\s*:\s*(.+?)\s*$",
         re.IGNORECASE | re.MULTILINE,
@@ -16,6 +18,7 @@ def extract_plan_field(plan: str, field_name: str) -> str:
 
 
 def extract_plan_section(plan: str, section_name: str) -> str:
+    """ Extract a multiline section from action plan"""
     pattern = re.compile(
         rf"^\s*{re.escape(section_name)}\s*:\s*(.*?)(?=^\s*[A-Z_ ]+\s*:|\Z)",
         re.IGNORECASE | re.DOTALL | re.MULTILINE,
@@ -30,6 +33,7 @@ def extract_plan_section(plan: str, section_name: str) -> str:
 
 
 def build_short_plan_view(plan: str, target: str) -> str:
+    """Build a summary action plan."""
     short_response = extract_plan_section(plan, "SHORT_RESPONSE")
     root_cause = extract_plan_section(plan, "ROOT_CAUSE_SUMMARY")
     planned_change = extract_plan_section(plan, "PLANNED_CHANGE")
@@ -70,6 +74,7 @@ def build_short_plan_view(plan: str, target: str) -> str:
 
 
 def build_ui_message(state: AgentState, phase: Phase, status: Status, errors: str) -> str:
+    """Build the message displayed in UI."""
     ui_message = ""
 
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:

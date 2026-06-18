@@ -7,7 +7,7 @@ from config import PROJECT_CONFIG
 from utils_files.phases import Phase
 from utils_files.status import Status
 from llama_index.core import Settings
-from utils_files.prompt_utils import safe_format
+from utils_files.file_ops import safe_format
 from utils_files.validator import validate_action_plan
 from scripts.utils_files.memory import save_analyzer_experience
 from utils_files.results_saving import get_index, save_agent_metrics
@@ -171,8 +171,8 @@ def root_cause_analysis(state: AgentState):
 
     specs = state.get("dut_specs", "")
     uvm_rules = state.get("uvm_rules", "")
-    print(f"dut_specs length={len(state.get('dut_specs', ''))}")
-    print(f"uvm_rules length={len(state.get('uvm_rules', ''))}")
+    #print(f"dut_specs length={len(state.get('dut_specs', ''))}")
+    #print(f"uvm_rules length={len(state.get('uvm_rules', ''))}")
     user_feedback = state.get("user_feedback", "")
 
     print(f"[DEBUG ANALYZER] user_feedback='{user_feedback}'")
@@ -213,7 +213,7 @@ def root_cause_analysis(state: AgentState):
     )
 
     rag_context_tokens = len(encoding.encode(specs)) + len(encoding.encode(uvm_rules))
-    print("[ANALYZER DEBUG] rag_context_tokens in analyzer prompt =", rag_context_tokens)
+    # print("[ANALYZER DEBUG] rag_context_tokens in analyzer prompt =", rag_context_tokens)
     
     # Build the final prompt
     prompt = safe_format(

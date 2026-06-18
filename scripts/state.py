@@ -51,3 +51,41 @@ class AgentState(TypedDict):
 
     new_dut_specs: str
     dut_change_analysis_result: str
+
+
+def get_initial_state() -> AgentState:
+    """
+    Creates the default shared state used by both the orchestrator and Streamlit UI.
+    """
+    return {
+        "holes_list": [],
+        "current_hole": {},
+        "root_cause_hole": "",
+        "ui_message": "",
+        "ui_input": "",
+        "fcov_report_path": "",
+        "simulation_log_path": "",
+        "dut_specs": "",
+        "uvm_rules": "",
+        "action_plan": "",
+        "generated_code": "",
+        "target_file": "",
+        "iterations": 0,
+        "rollback_files": {},
+        "compilation_error": "",
+        "coverage_holes": "",
+        "iteration_tokens": 0,
+        "user_command": "",
+        "user_feedback": "",
+        "coverage_value": 0.0,
+        "previous_coverage": 0.0,
+        "phase": Phase.INIT,
+        "status": Status.PROCESSING,
+        "error_category": "",
+        "error_analysis": "",
+        "auto_fix_allowed": False,
+        "new_dut_specs": "",
+        "dut_change_analysis_result": "",
+        "previous_holes_list": [],
+        "stimulus_memory_path": "",
+    }

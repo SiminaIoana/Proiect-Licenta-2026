@@ -1,11 +1,13 @@
-
-from state import AgentState
-from utils_files.file_ops import extract_code
-from config import PROJECT_CONFIG
 import os
 import re
+from state import AgentState
+from config import PROJECT_CONFIG
+from utils_files.file_ops import extract_code
+
+"""Code injection and rollback utilities."""
 
 def inject_generated_code(state: AgentState):
+    """ Extracts generated code blocks and injects them into the matching project files."""
     generated_code = state.get("generated_code", "")
     extracted_files = extract_code(generated_code)
 
@@ -26,6 +28,7 @@ def inject_generated_code(state: AgentState):
 
 
 def find_file_in_dirs(filename: str, dirs: list):
+    """ search for files and provided directory"""
     for directory in dirs:
         if not directory or not os.path.exists(directory):
             continue
@@ -38,16 +41,11 @@ def find_file_in_dirs(filename: str, dirs: list):
 
 
 def replace_sv_coverpoint(file_content: str, coverpoint_name: str, new_coverpoint_code: str) -> str:
-    """
-    Replaces a named SystemVerilog coverpoint block:
+    """ Replaces a named SystemVerilog coverpoint block:
     cp_name: coverpoint ... {
-       ...
     }
-
     It uses brace matching so it can safely replace the full coverpoint body.
     """
-    import re
-
     start_pattern = re.compile(
         rf"\b{re.escape(coverpoint_name)}\s*:\s*coverpoint\b",
         flags=re.MULTILINE
@@ -97,6 +95,7 @@ def replace_sv_coverpoint(file_content: str, coverpoint_name: str, new_coverpoin
 
 
 def create_rollback_checkpoint(state: AgentState):
+    """Checkpoint for the initial code"""
     generated_code = state.get("generated_code", "")
     extracted_files = extract_code(generated_code)
     bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
@@ -119,6 +118,7 @@ def create_rollback_checkpoint(state: AgentState):
 
 
 def restore_rollback_files(state: AgentState):
+    """ Restores the files saved in the rollback checkpoint."""
     rollback_files = state.get("rollback_files", {})
     if not rollback_files:
         return {
@@ -136,6 +136,11 @@ def restore_rollback_files(state: AgentState):
 
 
 def apply_smart_injection(file_path: str, new_content: str):
+    """ Applies generated code to a target file.
+    BAT files are updated near the coverage-report section, while SystemVerilog
+    files support class, covergroup and coverpoint replacement markers.
+    If no replacement marker is found, the new code is appended.
+    """
     with open(file_path, "r", encoding="utf-8") as f:
         old_content = f.read()
 
@@ -145,9 +150,7 @@ def apply_smart_injection(file_path: str, new_content: str):
     replace_coverpoint_name = None
     replace_covergroup_name = None
 
-    # ------------------------------------------------------------
     # Remove injector marker lines and detect replacement markers
-    # ------------------------------------------------------------
     lines = new_content.strip().splitlines()
     clean_lines = []
 
@@ -187,9 +190,7 @@ def apply_smart_injection(file_path: str, new_content: str):
         print(f"[INJECTOR] Empty content, skipping injection for {file_path}")
         return
 
-    # ------------------------------------------------------------
     # Special handling for MakeSVfile.bat
-    # ------------------------------------------------------------
     if filename.endswith(".bat"):
         marker = ":: functional coverage report"
 
@@ -213,18 +214,14 @@ def apply_smart_injection(file_path: str, new_content: str):
 
         return
 
-    # ------------------------------------------------------------
     # SystemVerilog handling
-    # ------------------------------------------------------------
     if filename.endswith(".sv"):
 
         if new_content in old_content:
             print(f"[INJECTOR] SV content already exists in {file_path}")
             return
-
-        # --------------------------------------------------------
+        
         # REPLACE_CLASS
-        # --------------------------------------------------------
         if replace_class_name:
             class_pattern = re.compile(
                 r"(^[ \t]*(?:virtual\s+)?class\s+"
@@ -251,9 +248,7 @@ def apply_smart_injection(file_path: str, new_content: str):
                 "Replacement marker was present, so append is not allowed."
             )
 
-        # --------------------------------------------------------
         # REPLACE_COVERGROUP
-        # --------------------------------------------------------
         if replace_covergroup_name:
             covergroup_pattern = re.compile(
                 r"(^[ \t]*covergroup\s+"
@@ -280,9 +275,7 @@ def apply_smart_injection(file_path: str, new_content: str):
                 "Replacement marker was present, so append is not allowed."
             )
 
-        # --------------------------------------------------------
         # REPLACE_COVERPOINT
-        # --------------------------------------------------------
         if replace_coverpoint_name:
             updated_content = replace_sv_coverpoint(
                 old_content,
@@ -296,9 +289,7 @@ def apply_smart_injection(file_path: str, new_content: str):
             print(f"[INJECTOR] Replaced coverpoint {replace_coverpoint_name} in {file_path}")
             return
 
-        # --------------------------------------------------------
         # Default APPEND behavior for SV files
-        # --------------------------------------------------------
         if "`endif" in old_content:
             idx = old_content.rfind("`endif")
             updated_content = (
@@ -318,9 +309,7 @@ def apply_smart_injection(file_path: str, new_content: str):
 
         return
 
-    # ------------------------------------------------------------
     # Default behavior for non-SV / non-BAT files
-    # ------------------------------------------------------------
     updated_content = old_content + "\n\n" + new_content
 
     with open(file_path, "w", encoding="utf-8") as f:

@@ -2,59 +2,21 @@ import os
 import sys
 import traceback
 import streamlit as st
-
-# ------------------------------------------------------------
-# Make project root importable
-# ------------------------------------------------------------
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from scripts.utils_files.phases import Phase
+from utils_files.phases import Phase
 from scripts.utils_files.status import Status
+from scripts.state import get_initial_state
 
-
-# ============================================================
-# ---------------- PAGE CONFIG -------------------------------
-# ============================================================
+# ---------------- PAGE CONFIGURATION -------------------------------
 st.set_page_config(
     page_title="VerifCopilot",
     layout="wide"
 )
-
-
-# ============================================================
-# ---------------- SESSION STATE INIT -------------------------
-# ============================================================
-def get_initial_state():
-    return {
-        "holes_list": [],
-        "current_hole": {},
-        "root_cause_hole": "",
-        "ui_message": "",
-        "ui_input": "",
-        "fcov_report_path": "",
-        "simulation_log_path": "",
-        "dut_specs": "",
-        "uvm_rules": "",
-        "action_plan": "",
-        "generated_code": "",
-        "target_file": "",
-        "iterations": 0,
-        "rollback_files": {},
-        "compilation_error": "",
-        "coverage_holes": "",
-        "iteration_tokens": 0,
-        "user_command": "",
-        "user_feedback": "",
-        "coverage_value": 0.0,
-        "previous_coverage": 0.0,
-        "phase": Phase.INIT,
-        "status": Status.PROCESSING,
-    }
-
 
 if "state" not in st.session_state:
     st.session_state.state = get_initial_state()
@@ -70,14 +32,9 @@ if "chat_history" not in st.session_state:
 if "run_graph" not in st.session_state:
     st.session_state.run_graph = False
 
-
-# ============================================================
-# ---------------- CHAT HELPERS -------------------------------
-# ============================================================
+# Chat and workflow helpers.
 def append_chat_message(role: str, content: str):
-    """
-    Adds a message to chat history, avoiding consecutive duplicates.
-    """
+    """ Adds a message to chat history """
     if not content:
         return
 
@@ -98,10 +55,7 @@ def append_chat_message(role: str, content: str):
 
 
 def reset_workflow_state(final_message: str = ""):
-    """
-    Resets internal graph state.
-    Does not automatically reset chat history unless caller does it.
-    """
+    """Resets internal graph state. """
     st.session_state.state = get_initial_state()
 
     if final_message:
@@ -132,9 +86,7 @@ def handle_session_done():
     st.rerun()
 
 
-# ============================================================
-# ---------------- SIDEBAR -----------------------------------
-# ============================================================
+# Sidebar controls and dashboard.
 with st.sidebar:
     st.title("VerifCopilot Controls")
 
@@ -166,9 +118,7 @@ with st.sidebar:
 
     st.divider()
 
-    # ============================================================
-    # ---------------- DASHBOARD SUMMARY -------------------------
-    # ============================================================
+    # DASHBOARD SUMMARY
     st.subheader("Dashboard")
 
     coverage = st.session_state.state.get("coverage_value", 0.0)
@@ -177,10 +127,7 @@ with st.sidebar:
     st.metric("Global Coverage", f"{coverage}%")
     st.metric("Uncovered Items", len(holes_list))
 
-
-    # ============================================================
-    # ---------------- CURRENT TARGET HOLE -----------------------
-    # ============================================================
+    # CURRENT TARGET HOLE 
     current_hole = st.session_state.state.get("current_hole", {})
 
     if current_hole:
@@ -196,9 +143,8 @@ with st.sidebar:
 
         with st.expander("Technical coverage details", expanded=False):
             st.code(current_hole.get("description", ""), language="text")
-    # ============================================================
-    # ---------------- COVERAGE HOLES RAW VIEW -------------------
-    # ============================================================
+
+    # COVERAGE HOLES RAW VIEW
     coverage_holes = st.session_state.state.get("coverage_holes", "")
 
     st.divider()
@@ -216,9 +162,7 @@ with st.sidebar:
         with st.expander("View raw technical extraction", expanded=False):
             st.code(coverage_holes, language="text")
 
-    # ============================================================
-    # ---------------- CURRENT HOLES LIST ------------------------
-    # ============================================================
+    # CURRENT HOLES LIST 
     holes_list = st.session_state.state.get("holes_list", [])
 
     st.divider()
@@ -249,9 +193,7 @@ with st.sidebar:
         st.caption("No current coverage holes available.")
 
 
-# ============================================================
-# ---------------- MAIN CHAT UI -------------------------------
-# ============================================================
+# MAIN CHAT UI 
 st.title("VerifCopilot")
 
 # Display existing chat history first
@@ -259,38 +201,25 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-
-# ============================================================
-# ---------------- USER INPUT --------------------------------
-# ============================================================
-user_input = st.chat_input(
-    "Type a message, choose an option, or write feedback..."
-)
+# USER INPUT
+user_input = st.chat_input( "Type a message, choose an option, or write feedback...")
 
 should_run = user_input is not None or st.session_state.get("run_graph", False)
 
-
-# ============================================================
-# ---------------- GRAPH EXECUTION ----------------------------
-# ============================================================
+# GRAPH EXECUTION 
 if should_run:
-    # ------------------------------------------------------------
-    # 1. Store and display user input immediately
-    # ------------------------------------------------------------
+    # Store and display user input immediately
     if user_input is not None:
         append_chat_message("user", user_input)
         st.session_state.state["ui_input"] = user_input
 
-        # Display immediately in current run,
-        # because the chat history was already rendered above.
+        # Display immediately in current run
         with st.chat_message("user"):
             st.markdown(user_input)
     else:
         st.session_state.state["ui_input"] = ""
 
-    # ------------------------------------------------------------
-    # 2. Run graph
-    # ------------------------------------------------------------
+    # Run graph
     with st.chat_message("assistant"):
         with st.status("AI Orchestrator Execution...", expanded=True) as status_box:
             try:
@@ -301,7 +230,7 @@ if should_run:
                     stream_mode="updates"
                 ):
                     for node_name, output in step.items():
-                        # ---------------- node progress ----------------
+                        # node progress 
                         if node_name == "rag_builder":
                             st.write("Reading documentation and retrieving RAG context...")
 
@@ -323,7 +252,7 @@ if should_run:
                         elif node_name == "phase_controller":
                             st.write("Updating workflow phase...")
 
-                        # ---------------- update state ----------------
+                        # update state 
                         if output:
                             st.session_state.state.update(output)
 
@@ -337,21 +266,15 @@ if should_run:
                 st.session_state.state["ui_input"] = ""
                 st.session_state.run_graph = False
 
-                # ------------------------------------------------------------
-                # 3. Handle DONE / quit branch
-                # ------------------------------------------------------------
+                # quit branch
                 if st.session_state.state.get("phase") == Phase.DONE:
                     handle_session_done()
 
-                # ------------------------------------------------------------
-                # 4. Normal assistant response
-                # ------------------------------------------------------------
+                # Normal assistant response-
                 ai_msg = st.session_state.state.get("ui_message", "")
 
                 if not ai_msg:
-                    ai_msg = (
-                        "Processing completed. Please continue with the next available action."
-                    )
+                    ai_msg = ("Processing completed. Please continue with the next available action.")
 
                 st.markdown(ai_msg)
                 append_chat_message("assistant", ai_msg)
@@ -372,9 +295,9 @@ if should_run:
                 print(error_trace)
                 print("=" * 60 + "\n")
 
-                st.error(f"**Eroare Orchestrator:** {str(e)}")
+                st.error(f"**Orchestrator Error:** {str(e)}")
 
-                with st.expander("Vezi detalii eroare / traceback", expanded=True):
+                with st.expander("See details", expanded=True):
                     st.code(error_trace, language="python")
 
                 st.stop()

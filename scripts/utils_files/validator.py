@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass
 from config import PROJECT_CONFIG
 
-
+# Allowed values produced by the Analyzer action plan.
 ALLOWED_STRATEGIES = {
     "RUN_SCRIPT_FIX",
     "NEW_SEQUENCE",
@@ -32,14 +32,16 @@ SUPPORTED_MODIFY_MARKERS = {
     "REPLACE_COVERGROUP",
 }
 
-
+"""Validator for Analyzer node
+Normalize strategy, code actions, and target files before the plan is passed to generator node"""
 @dataclass
 class PlanValidationResult:
+    """Result returned after validating and normalizing an action plan.s"""
     plan_text: str
     target_files: str
     warnings: list[str]
 
-
+#extract named filed fron the action plan
 def parse_plan_field(plan_text: str, field_name: str) -> str:
     pattern = re.compile(
         rf"^\s*{re.escape(field_name)}\s*:\s*(.+?)\s*$",
@@ -49,6 +51,7 @@ def parse_plan_field(plan_text: str, field_name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+#replace a plan field if it exists or add one
 def replace_or_add_field(plan_text: str, field_name: str, value: str) -> str:
     pattern = re.compile(
         rf"(^\s*{re.escape(field_name)}\s*:\s*)(.+?)\s*$",
@@ -61,9 +64,9 @@ def replace_or_add_field(plan_text: str, field_name: str, value: str) -> str:
     return (plan_text or "").rstrip() + f"\n\n{field_name}: {value}\n"
 
 
+# return directories where project can be searched
 def get_project_search_dirs() -> list[str]:
     dirs = []
-
     tb_dir = PROJECT_CONFIG.get("tb_dir", "")
     rtl_dir = PROJECT_CONFIG.get("rtl_dir", "")
     bat_file_path = PROJECT_CONFIG.get("bat_file_path", "")
@@ -81,7 +84,7 @@ def get_project_search_dirs() -> list[str]:
 
     return list(dict.fromkeys(dirs))
 
-
+# return files from project
 def get_existing_project_files() -> dict[str, str]:
     existing_files = {}
 
@@ -97,6 +100,7 @@ def get_existing_project_files() -> dict[str, str]:
     return existing_files
 
 
+# name of script
 def get_run_script_name() -> str:
     bat_file_path = PROJECT_CONFIG.get("bat_file_path", "")
     if not bat_file_path:
@@ -104,6 +108,7 @@ def get_run_script_name() -> str:
     return os.path.basename(bat_file_path)
 
 
+# remove formatting from name
 def clean_file_name(raw_file: str) -> str:
     return (
         raw_file.strip()
@@ -112,10 +117,13 @@ def clean_file_name(raw_file: str) -> str:
         .replace("'", "")
     )
 
+# checks if text contains any phrases from list 
 def contains_any(text: str, phrases: list[str]) -> bool:
     lower = (text or "").lower()
     return any(phrase.lower() in lower for phrase in phrases)
 
+
+# finds the existing project by keywords
 def find_file_by_keywords(existing_files: dict[str, str], keywords: list[str]) -> str:
     candidates = []
 
@@ -132,6 +140,7 @@ def find_file_by_keywords(existing_files: dict[str, str], keywords: list[str]) -
     return sorted(candidates, key=len)[0]
 
 
+#infers the verification role of a file by its name
 def infer_role_from_file_name(file_name: str) -> str:
     lower = file_name.lower()
 
@@ -165,6 +174,7 @@ def infer_role_from_file_name(file_name: str) -> str:
     return ""
 
 
+# normalize target file and return warning
 def normalize_one_target_file(raw_file: str, existing_files: dict[str, str]) -> tuple[str, str]:
     file_name = clean_file_name(raw_file)
 
@@ -201,16 +211,15 @@ def normalize_one_target_file(raw_file: str, existing_files: dict[str, str]) -> 
     return file_name, f"Target file '{file_name}' was not found in configured project directories."
 
 
+# normalize all target files from project
 def normalize_target_files(target_files: str, existing_files: dict[str, str]) -> tuple[str, list[str]]:
     normalized = []
     warnings = []
 
     for raw_file in (target_files or "").split(","):
         file_name, warning = normalize_one_target_file(raw_file, existing_files)
-
         if file_name:
             normalized.append(file_name)
-
         if warning:
             warnings.append(warning)
 
@@ -218,15 +227,14 @@ def normalize_target_files(target_files: str, existing_files: dict[str, str]) ->
     return ", ".join(normalized), warnings
 
 
+# normalise chosen strategy, keep a valid strategy
 def normalize_strategy(strategy_text: str) -> tuple[str, str]:
     raw = (strategy_text or "").strip()
     upper = raw.upper()
 
     matches = [strategy for strategy in ALLOWED_STRATEGIES if strategy in upper]
-
     if not matches:
         return raw, ""
-
     if len(matches) == 1:
         return matches[0], ""
 
@@ -235,16 +243,14 @@ def normalize_strategy(strategy_text: str) -> tuple[str, str]:
 
     return chosen, f"Multiple strategies detected. Kept only '{chosen}'."
 
-
+# keeps code valid 
 def normalize_code_action(code_action_text: str) -> tuple[str, str]:
     raw = (code_action_text or "").strip()
     upper = raw.upper()
 
     matches = [action for action in ALLOWED_CODE_ACTIONS if action in upper]
-
     if not matches:
         return raw, ""
-
     if len(matches) == 1:
         return matches[0], ""
 
@@ -254,11 +260,13 @@ def normalize_code_action(code_action_text: str) -> tuple[str, str]:
     return chosen, f"Multiple code actions detected. Kept only '{chosen}'."
 
 
+# check if modify action is suported by injector
 def has_supported_modify_marker(plan_text: str) -> bool:
     upper = (plan_text or "").upper()
     return any(marker in upper for marker in SUPPORTED_MODIFY_MARKERS)
 
 
+# appends validator options if exists
 def append_validator_notes(plan_text: str, notes: list[str]) -> str:
     if not notes:
         return plan_text
@@ -272,22 +280,19 @@ def append_validator_notes(plan_text: str, notes: list[str]) -> str:
 
 
 def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
+    """Validates and normalizes an Analyzer action plan."""
     corrected_plan = plan_text or ""
     warnings = []
     notes = []
 
     existing_files = get_existing_project_files()
 
-    # ------------------------------------------------------------
-    # 1. Parse initial plan fields
-    # ------------------------------------------------------------
+    # Parse initial plan fields
     strategy_raw = parse_plan_field(corrected_plan, "CHOSEN STRATEGY")
     code_action_raw = parse_plan_field(corrected_plan, "CODE_ACTION")
     target_files_raw = parse_plan_field(corrected_plan, "TARGET_FILES")
 
-    # ------------------------------------------------------------
-    # 2. Normalize strategy first
-    # ------------------------------------------------------------
+    # Normalize strategy first
     strategy, strategy_warning = normalize_strategy(strategy_raw)
 
     if strategy and strategy != strategy_raw:
@@ -301,11 +306,7 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
         warnings.append(strategy_warning)
         notes.append(strategy_warning)
 
-    # ------------------------------------------------------------
-    # 3. Special deterministic correction:
-    #    If sequence/test already exist and only run command is missing,
-    #    do NOT create duplicate sequence/test.
-    # ------------------------------------------------------------
+    # Special deterministic correction
     root_cause_type = parse_plan_field(corrected_plan, "ROOT_CAUSE_TYPE").upper()
     run_script = get_run_script_name()
 
@@ -421,9 +422,7 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
             run_script,
         )
 
-        # Very important:
-        # update local variables too, otherwise the code below still sees
-        # the old strategy such as NEW_SEQUENCE.
+        # update local variables, the old strategy have to be updated
         strategy = "RUN_SCRIPT_FIX"
         code_action_raw = "APPEND"
         target_files_raw = run_script
@@ -438,9 +437,7 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
         warnings.append(note)
         notes.append(note)
 
-    # ------------------------------------------------------------
-    # 4. Normalize code action after possible strategy correction
-    # ------------------------------------------------------------
+    # Normalize code action after possible strategy correction
     code_action, action_warning = normalize_code_action(code_action_raw)
 
     if code_action and code_action != code_action_raw:
@@ -457,58 +454,46 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
     if code_action == "MODIFY" and strategy == "NEW_SEQUENCE":
         if contains_any(
             corrected_plan,
-        [
-            "modify the existing",
-            "modify existing",
-            "existing directed sequence",
-            "existing sequence",
-            "current sequence",
-            "sequence already exists",
-            "already exists",
-            "rather than adding",
-            "rather than creating",
-            "do not create",
-            "not append",
-            "instead of appending",
-        ],
-        ):
+            [
+                "modify the existing",
+                "modify existing",
+                "existing directed sequence",
+                "existing sequence",
+                "current sequence",
+                "sequence already exists",
+                "already exists",
+                "rather than adding",
+                "rather than creating",
+                "do not create",
+                "not append",
+                "instead of appending",
+            ],):
             corrected_plan = replace_or_add_field(
-            corrected_plan,
-            "CHOSEN STRATEGY",
-            "MODIFY_EXISTING_SEQUENCE",
+                corrected_plan,
+                "CHOSEN STRATEGY",
+                "MODIFY_EXISTING_SEQUENCE",
             )
 
             strategy = "MODIFY_EXISTING_SEQUENCE"
 
             note = (
-            "CODE_ACTION is MODIFY and the plan refers to an existing sequence. "
-            "Changed strategy from NEW_SEQUENCE to MODIFY_EXISTING_SEQUENCE."
+                "CODE_ACTION is MODIFY and the plan refers to an existing sequence. "
+                "Changed strategy from NEW_SEQUENCE to MODIFY_EXISTING_SEQUENCE."
             )
 
             warnings.append(note)
             notes.append(note)
 
-    # ------------------------------------------------------------
-    # 5. Normalize target files after possible strategy correction
-    # ------------------------------------------------------------
-    target_files, file_warnings = normalize_target_files(
-        target_files_raw,
-        existing_files,
-    )
+    # Normalize target files after possible strategy correction
+    target_files, file_warnings = normalize_target_files(target_files_raw,existing_files,)
 
     if target_files and target_files != target_files_raw:
-        corrected_plan = replace_or_add_field(
-            corrected_plan,
-            "TARGET_FILES",
-            target_files,
-        )
+        corrected_plan = replace_or_add_field(corrected_plan, "TARGET_FILES", target_files,)
 
     warnings.extend(file_warnings)
     notes.extend(file_warnings)
 
-    # ------------------------------------------------------------
-    # 6. Strategy-specific deterministic guidance
-    # ------------------------------------------------------------
+    # Strategy-specific deterministic guidance
     if strategy == "NEW_SEQUENCE":
         sequence_file = find_file_by_keywords(existing_files, ["sequence", "seq"])
         test_file = find_file_by_keywords(existing_files, ["test"])
@@ -573,8 +558,7 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
 
         if run_script:
             notes.append(
-                "For NEW_TEST, add the new test execution command to the "
-                "configured run script."
+                "For NEW_TEST, add the new test execution command to the configured run script."
             )
 
     elif strategy == "RUN_SCRIPT_FIX":
@@ -588,22 +572,16 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
             )
 
         notes.append(
-    "For RUN_SCRIPT_FIX, only append or update the configured run script. "
-    "Do not generate new SystemVerilog sequence or test classes unless "
-    "the plan explicitly proves that the existing ones are insufficient."
-    )
+                "For RUN_SCRIPT_FIX, only append or update the configured run script. "
+                "Do not generate new SystemVerilog sequence or test classes unless the plan explicitly proves that the existing ones are insufficient."
+        )
 
         notes.append(
-    "When adding a run command for an existing UVM test, derive the coverage "
-    "database name and log file name from the UVM_TESTNAME. Example: for "
-    "UVM_TESTNAME=test_data_bins, use -cov_db_name cov_test_data_bins and "
-    "redirect output to xsim_test_data_bins.log. Do not use generic names "
-    "such as cov_test2 or xsim_test2.log if a test-specific name can be used."
-    )
+                "When adding a run command for an existing UVM test, derive the coverage database name and log file name from the UVM_TESTNAME. Example:"
+                "for UVM_TESTNAME=test_data_bins, use -cov_db_name cov_test_data_bins and redirect output to xsim_test_data_bins.log. Do not use generic namessuch as cov_test2 or xsim_test2.log if a test-specific name can be used."
+        )
 
-    # ------------------------------------------------------------
-    # 7. Check MODIFY compatibility with injector
-    # ------------------------------------------------------------
+    # Check MODIFY compatibility with injector
     if code_action == "MODIFY" and not has_supported_modify_marker(corrected_plan):
         note = (
             "CODE_ACTION is MODIFY, but the plan does not mention an "
@@ -614,14 +592,10 @@ def validate_action_plan(plan_text: str, state: dict) -> PlanValidationResult:
         warnings.append(note)
         notes.append(note)
 
-    # ------------------------------------------------------------
-    # 8. Append validator notes to the plan
-    # ------------------------------------------------------------
+    # Append validator notes to the plan
     corrected_plan = append_validator_notes(corrected_plan, notes)
 
-    # ------------------------------------------------------------
-    # 9. Final target files returned to Analyzer/Generator
-    # ------------------------------------------------------------
+    # Final target files returned to Analyzer/Generator\
     final_target_files = parse_plan_field(corrected_plan, "TARGET_FILES")
     final_target_files, _ = normalize_target_files(
         final_target_files,

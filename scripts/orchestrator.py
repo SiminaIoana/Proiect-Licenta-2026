@@ -1,24 +1,25 @@
 import os
-import datetime
-import time
 import csv
-from langgraph.graph import StateGraph, END, START
-from typing import Literal
+import time
+import datetime
 from config import initialize_llm
-from scripts.utils_files.phases import Phase
-from scripts.utils_files.status import Status
-from state import AgentState
+from utils_files.phases import Phase
+from utils_files.status import Status
 from nodes.rag_builder import rag_node
+from nodes.checking import checker_node
+from state import AgentState, get_initial_state
 from nodes.agents.analyzer import analyzer_node
 from nodes.agents.generator import generator_node
 from utils_files.injection import restore_rollback_files
-from nodes.checking import checker_node
 from nodes.human_interaction_node import human_interaction_node
 from config import PROJECT_CONFIG
+from langgraph.graph import StateGraph, END, START
+
 # init LLM
 initialize_llm()
 
 def phase_controller_node(state: AgentState):
+    """Main LangGraph orchestrator for the coverage-closure workflow."""
     phase = state.get("phase", Phase.INIT)
     status = state.get("status", Status.PROCESSING)
     cmd = state.get("user_command", "").strip().lower()
@@ -122,7 +123,9 @@ def phase_controller_node(state: AgentState):
         "user_command": ""
     }
 
+
 def route_from_phase_controller(state: AgentState):
+    """ Routes the graph to the correct node for the selected phase. """
     phase = state.get("phase", Phase.INIT)
 
     if phase in [Phase.RUN_CHECKER, Phase.RUN_AFTER_FIX]:
@@ -157,6 +160,7 @@ def route_from_phase_controller(state: AgentState):
 
     return END
 
+
 def route_from_start(state: AgentState):
     use_rag = PROJECT_CONFIG.get("use_rag", True)
 
@@ -170,6 +174,7 @@ def route_from_start(state: AgentState):
 
     return "phase_controller"
 
+
 def route_from_human(state: AgentState):
     cmd = state.get("user_command", "").strip().lower()
 
@@ -178,9 +183,8 @@ def route_from_human(state: AgentState):
 
     return "phase_controller"
 
-# =====================================================
-# ----------- BUILD LANGGRAPH SYSTEM ------------------
-# =====================================================
+
+# Build LangGraph workflow.
 workflow = StateGraph(AgentState)
 
 workflow.add_node("phase_controller", phase_controller_node)
@@ -205,42 +209,12 @@ workflow.add_edge("generator", "phase_controller")
 workflow.add_conditional_edges("human_interaction", route_from_human)
 
 app_graph = workflow.compile()
-# =====================================================
-# ----------- TERMINAL EXECUTION -----------
-# =====================================================
 
+
+# Terminal execution entry point.
 def build_and_run():
-    initial_state = {
-        "holes_list": [],
-        "current_hole": {},
-        "root_cause_hole": "",
-        "ui_message": "",
-        "ui_input": "",
-        "fcov_report_path": "",
-        "simulation_log_path": "",
-        "dut_specs": "",        
-        "uvm_rules": "",
-        "action_plan": "",
-        "generated_code": "",
-        "target_file": "",      
-        "iterations": 0,
-        "rollback_files": {},
-        "compilation_error": "",
-        "coverage_holes":"",
-        "iteration_tokens": 0,
-        "user_command":"",
-        "user_feedback":"",
-        "coverage_value":0.0,
-        "previous_coverage":0.0,
-        "phase": Phase.INIT,
-        "status": Status.PROCESSING,
-        "error_category": "",
-        "error_analysis": "",
-        "auto_fix_allowed": False,
-        "new_dut_specs": "",    
-        "dut_change_analysis_result": "",
-    }
-    print("\n============= START LANGRGRAPH SYSTEM ===============\n")
+    initial_state = get_initial_state()
+    print("\n============= START LANGGRAPH SYSTEM ===============\n")
   
     start_time = time.time()
     final_state = app_graph.invoke(initial_state)
@@ -262,7 +236,7 @@ def build_and_run():
         timestamp = datetime.datetime.now().strftime("%m/%d/%Y %H:%M")
         writer.writerow([timestamp, f"{total_time:.2f}", total_iterations])
     
-    print("\n============= STOP LANGRGRAPH SYSTEM ===============\n")
+    print("\n============= STOP LANGGRAPH SYSTEM ===============\n")
 
 if __name__ == "__main__":
     build_and_run()

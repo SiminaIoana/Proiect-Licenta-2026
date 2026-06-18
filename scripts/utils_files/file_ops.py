@@ -302,3 +302,13 @@ def extract_error_file_locations(error_text: str) -> list[dict]:
             seen.add(key)
 
     return unique
+
+# used for prompts
+def safe_format(template: str, **kwargs):
+    # escape all {}
+    template = template.replace("{", "{{").replace("}", "}}")
+    # correct variable
+    for key in kwargs:
+        template = template.replace("{{" + key + "}}", "{" + key + "}")
+
+    return template.format(**kwargs)

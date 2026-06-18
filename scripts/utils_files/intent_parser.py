@@ -1,46 +1,13 @@
 import re
-from config import PROJECT_CONFIG
 from utils_files.phases import Phase
 from llama_index.core import Settings
-
+from scripts.utils_files.file_ops import safe_format
+from scripts.prompts.human_interaction_feedback import INTENT_PARSER_PROMPT
 
 
 def llm_intent_classifier(user_input: str, phase: Phase) -> str:
     llm = Settings.llm
-    prompt = f"""
-            You are an intent classifier for a UVM coverage assistant.
-
-            Your task is to classify the user's message into exactly ONE action.
-
-            Current system phase: {phase}
-
-            Allowed actions:
-            - approve
-            - reject
-            - rollback
-            - retry
-            - show_list
-            - quit
-            - unknown
-        Rules:
-        1. If the user wants to continue, accept, approve, or proceed, return approve.
-        2. If the user wants to reject, regenerate, or get another solution, return reject.
-        3. If the user wants to restore previous code, undo changes, or revert, return rollback.
-        4. If the user wants to try fixing the same hole again, return retry.
-        5. If the user wants to see holes, choose another hole, or go back to the list, return show_list.
-        6. If the user wants to stop, exit, quit, or end the session, return quit.
-        7. If the message is unclear, return unknown.
-
-        Very important:
-        Return ONLY in this exact format:
-        action=<one_action>
-
-        Do not explain anything.
-        Do not return multiple actions.
-
-        User message:
-        \"\"\"{user_input}\"\"\"
-    """
+    prompt = safe_format(INTENT_PARSER_PROMPT,user_input=user_input, phase=str(phase))
 
     response = llm.complete(prompt)
     text = response.text.strip().lower()

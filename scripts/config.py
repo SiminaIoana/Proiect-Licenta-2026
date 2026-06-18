@@ -1,11 +1,9 @@
 import os
 import json
 from dotenv import load_dotenv
-
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.openai_like import OpenAILike
 from llama_index.core import Settings
-
+from llama_index.llms.openai_like import OpenAILike
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 try:
     with open("project_config.json", "r") as f:
@@ -102,4 +100,5 @@ def initialize_llm():
         print(f"[CONFIG] Mistral model: {os.getenv('MISTRAL_MODEL', 'mistral-small-latest')}")
         print(f"[CONFIG] Mistral context_window: {os.getenv('MISTRAL_CONTEXT_WINDOW', '262144')}")
         print(f"[CONFIG] Mistral max_tokens: {os.getenv('MISTRAL_MAX_TOKENS', '8192')}")
+        
     return llm
