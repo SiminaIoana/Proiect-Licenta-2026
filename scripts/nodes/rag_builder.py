@@ -23,31 +23,59 @@ def rag_node(state: AgentState):
      start_time = time.time()
      token_counter.reset_counts()
 
-     # Paths for documentation
-     dynamic_path = PROJECT_CONFIG["dynamic_docs_path"]
-     static_path = PROJECT_CONFIG["static_docs_path"]
-     query_context = PROJECT_CONFIG["rag_search_query"]
-    
-     index_dynamic = get_index(dynamic_path, "../DOCS/storage_dynamic/", "Dynamic index")
-     index_static = get_index(static_path, "../DOCS/storage_static/", "Static index")
-    
-     dynamic_query = DYNAMIC_RAG_QUERY.format(query_context=query_context)
-     dynamic_response = index_dynamic.as_query_engine().query(dynamic_query)
+     dynamic_response = ""
+     static_response = ""
+     rag_status = "SUCCESS"
+     rag_notes = []
 
-     static_query = STATIC_RAG_QUERY
-     static_response = index_static.as_query_engine().query(static_query)
+     try:
+          dynamic_path = PROJECT_CONFIG.get("dynamic_docs_path", "")
+          static_path = PROJECT_CONFIG.get("static_docs_path", "")
+          query_context = PROJECT_CONFIG.get("rag_search_query", "")
 
-     encoding = tiktoken.get_encoding("cl100k_base")
+          dynamic_query = DYNAMIC_RAG_QUERY.format(query_context=query_context)
+          static_query = STATIC_RAG_QUERY
 
-     # Prints for debug
-     # print("[RAG DEBUG] dynamic_response chars =", len(str(dynamic_response)))
-     # print("[RAG DEBUG] static_response chars =", len(str(static_response)))
-     # print("[RAG DEBUG] dynamic_response tokens =", len(encoding.encode(str(dynamic_response))))
-     # print("[RAG DEBUG] static_response tokens =", len(encoding.encode(str(static_response))))
-     # print("[RAG DEBUG] dynamic_response preview:")
-     # print(str(dynamic_response))
-     # print("[RAG DEBUG] static_response preview:")
-     # print(str(static_response))
+          index_dynamic = get_index(
+               dynamic_path,
+               "./DOCS/storage_dynamic/",
+               "Dynamic index"
+          )
+
+          index_static = get_index(
+               static_path,
+               "./DOCS/storage_static/",
+               "Static index"
+          )
+
+          if index_dynamic is not None:
+               try:
+                    dynamic_response = index_dynamic.as_query_engine().query(dynamic_query)
+               except Exception as e:
+                    rag_status = "WARNING"
+                    rag_notes.append(f"Dynamic RAG query failed: {e}")
+                    print(f"[RAG WARNING]: Dynamic RAG query failed: {e}")
+          else:
+               rag_status = "WARNING"
+               rag_notes.append("Dynamic index was not available.")
+               print("[RAG WARNING]: Dynamic index was not available.")
+
+          if index_static is not None:
+               try:
+                    static_response = index_static.as_query_engine().query(static_query)
+               except Exception as e:
+                    rag_status = "WARNING"
+                    rag_notes.append(f"Static RAG query failed: {e}")
+                    print(f"[RAG WARNING]: Static RAG query failed: {e}")
+          else:
+               rag_status = "WARNING"
+               rag_notes.append("Static index was not available.")
+               print("[RAG WARNING]: Static index was not available.")
+
+     except Exception as e:
+          rag_status = "FAILED"
+          rag_notes.append(f"RAG Builder failed: {e}")
+          print(f"[RAG ERROR]: RAG Builder failed: {e}")
 
      rag_tokens = token_counter.total_llm_token_count
      duration = round(time.time() - start_time, 2)
@@ -60,12 +88,14 @@ def rag_node(state: AgentState):
           response_tokens=0,
           total_tokens=rag_tokens,
           duration_seconds=duration,
-          status="SUCCESS",
-          notes="static_docs + dynamic_docs"
+          status=rag_status,
+          notes="; ".join(rag_notes) if rag_notes else "static_docs + dynamic_docs"
      )
 
      return {
-          "uvm_rules": str(static_response), 
-          "dut_specs": str(dynamic_response),
-          "iteration_tokens": rag_tokens
+          "uvm_rules": str(static_response) if static_response else "",
+          "dut_specs": str(dynamic_response) if dynamic_response else "",
+          "iteration_tokens": state.get("iteration_tokens", 0) + rag_tokens,
+          "rag_status": rag_status,
+          "rag_notes": rag_notes,
      }
