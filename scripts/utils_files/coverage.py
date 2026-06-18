@@ -3,7 +3,7 @@ import re
 from utils_files.status import Status
 from collections import defaultdict, deque
 
-# Text helpers for parsing and formatting coverage holes from Vivado XCRG text reports.
+# Utility functions for parsing Vivado/XSim functional coverage reports.
 def clean_ws(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").replace("\t", " ").strip())
 
@@ -41,6 +41,7 @@ def split_csv_line(line: str) -> list[str]:
     return [cell.strip() for cell in line.split(",")]
 
 
+# Helpers for comparing coverage before and after a generated fix.
 def safe_float(value, default: float = 0.0) -> float:
     try:
         if value is None or value == "N/A":
@@ -48,8 +49,8 @@ def safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except Exception:
         return default
-    
-    
+
+
 def normalize_hole_description(description: str) -> str:
     text = (description or "").lower()
     text = re.sub(r"^-\s*", "", text)
@@ -109,9 +110,7 @@ def is_same_logical_hole(selected_hole: str, updated_hole: str) -> bool:
 def find_matching_hole_in_updated_list(selected_hole, updated_holes_list: list):
     """
     First compares by stable key, then falls back to textual description.
-    This avoids confusing holes with the same coverpoint/cross name but different instances.
     """
-
     if isinstance(selected_hole, dict):
         selected_key = selected_hole.get("key", "")
         selected_description = selected_hole.get("description", "")
@@ -130,7 +129,6 @@ def find_matching_hole_in_updated_list(selected_hole, updated_holes_list: list):
             return hole
 
     return None
-
 
 
 def classify_fix_result(
@@ -186,7 +184,8 @@ def build_detailed_result_message(
     strategy: str,
     code_action: str,
     target_files: str,
-    updated_holes_list: list,) -> str:
+    updated_holes_list: list,
+    ) -> str:
     
     matching_hole = classification_details.get("matching_hole")
     selected_still_present = classification_details.get("selected_still_present")
@@ -273,7 +272,6 @@ def build_detailed_result_message(
         f"{remaining_text}\n\n"
         f"**Recommended next step:** {recommendation}"
     )
-
 
 
 def extract_xcrg_section(content: str, section_name: str, next_section_name: str | None = None) -> str:
@@ -734,18 +732,6 @@ def extract_coverage_percent(path: str) -> float:
         return 0.0
 
     return float(parsed.get("summary", {}).get("coverage_score", 0.0) or 0.0)
-
-
-def extract_number_of_tests(path: str) -> int:
-    """
-    For checking whether the report includes one test or multiple tests.
-    """
-    parsed = parse_xcrg_functional_coverage(path)
-
-    if parsed["status"] != "OK":
-        return 0
-
-    return int(parsed.get("summary", {}).get("number_of_tests", 0) or 0)
 
 
 def filter_log_for_hole(sim_log: str, hole_description: str, max_lines: int = 120) -> str:

@@ -3,10 +3,7 @@ import re
 import glob
 from scripts.config import PROJECT_CONFIG
 
-    
-# ============================================================
-# ------- FUNCTION FOR READING RTL FILES ------
-# ============================================================
+
 def read_rtl(rtl_dir: str) -> str:
     '''Read source files (.sv, .v) '''
     content = ""
@@ -15,7 +12,7 @@ def read_rtl(rtl_dir: str) -> str:
 
     for root, _, files in os.walk(rtl_dir):
         for file in files:
-            # RTL-ul poate fi si Verilog si SystemVerilog
+            # RTLcan be Verilog or SystemVerilog
             if file.endswith(".v") or file.endswith(".sv"): 
                 file_path = os.path.join(root, file)
                 try:
@@ -26,9 +23,6 @@ def read_rtl(rtl_dir: str) -> str:
     return content
 
 
-# ============================================================
-# ------- FUNCTION FOR READING TESTBENCH FILES ------
-# ============================================================
 def read_env(tb_dir: str) -> str:
     '''Read source files (.sv, .v) '''
     content = ""
@@ -37,8 +31,8 @@ def read_env(tb_dir: str) -> str:
 
     for root, _, files in os.walk(tb_dir):
         for file in files:
+            # Files can be Verilog or SystemVerilog
             if file.endswith(".sv") or file.endswith(".v"):
-
                 if "DEBUG" in file or "ai_proposed" in file or "unknown_file" in file:
                     continue
                     
@@ -51,11 +45,8 @@ def read_env(tb_dir: str) -> str:
     return content
 
 
-
-# ============================================================
-# ------- FUNCTION FOR READING SPECIFIC TARGET FILES ---------
-# ============================================================
 def read_specific_files(target_files_str: str, search_dirs: list) -> str:
+    """Reads only the files requested by the Generator from the given directories."""
     target_files = [f.strip() for f in target_files_str.split(',')]
     content = ""
     
@@ -86,10 +77,9 @@ def read_specific_files(target_files_str: str, search_dirs: list) -> str:
             
     return content
 
-# ============================================================
-# ------- FUNCTION FOR READING RUN SCRIPT ------
-# ============================================================
+
 def read_run_script(bat_file_path: str) -> str:
+    """Reads the Vivado/XSim run script."""
     if not bat_file_path or not os.path.exists(bat_file_path):
         return "Warning: Run script not found."
     try:
@@ -100,22 +90,19 @@ def read_run_script(bat_file_path: str) -> str:
         return f"Warning: Could not read run script: {e}"
     
 
-# ================================================
-# ------- FUNCTION FOR READING XSIM.LOG ------
-# ================================================
 def read_simulation_log(log_path: str) -> str:
-
-    # Încearcă mai întâi folderul din log_path
+    """Builds a compact summary from the available XSim simulation logs."""
+    # check first log file
     log_dir = os.path.dirname(os.path.abspath(log_path)) if log_path else ""
     
-    # Dacă nu găsește, încearcă directorul de rulare din config
+    # check in config file
     per_test_logs = sorted(glob.glob(os.path.join(log_dir, "xsim_test*.log")))
     
     if not per_test_logs:
         run_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
         per_test_logs = sorted(glob.glob(os.path.join(run_dir, "xsim_test*.log")))
 
-    # Fallback final pe xsim.log clasic
+    # check xsim_logs
     if not per_test_logs:
         if log_path and os.path.exists(log_path):
             per_test_logs = [log_path]
@@ -142,8 +129,7 @@ def read_simulation_log(log_path: str) -> str:
             ]):
                 important_lines.append(line_s)
 
-        # Numărăm din Report Summary (ultima apariție), nu din tot fișierul
-        # altfel numărăm fiecare linie de log individual
+        # counting appeared errors
         fatals   = sum(1 for l in lines if "UVM_FATAL"   in l and "Report counts" not in l)
         errors   = sum(1 for l in lines if "UVM_ERROR"   in l and "Report counts" not in l)
         warnings = sum(1 for l in lines if "UVM_WARNING" in l and "Report counts" not in l)
@@ -156,17 +142,14 @@ def read_simulation_log(log_path: str) -> str:
     return "\n\n".join(summary_parts)
     
 
-# ==============================================================
-# ------ FUNCTION FOR EXTRACTING CODE------
-# ==============================================================
 def extract_code(original_code: str) -> dict:
+    """Extracts generated code blocks and maps them to target file names."""
     extracted_files = {}
-    
-    # Caută toate blocurile de cod (indiferent dacă sunt systemverilog, tcl sau goale)
+    # Search in every code block
     blocks = re.findall(r"```[a-zA-Z]*\n(.*?)```", original_code, re.DOTALL)
     
     if not blocks:
-        # Dacă nu găsește markdown, returnează tot codul ca un fișier generic
+        # Not found markdown
         return {"unknown_file.sv": original_code}
 
     for block in blocks:
@@ -175,8 +158,7 @@ def extract_code(original_code: str) -> dict:
             continue
             
         first_line = lines[0].strip()
-        
-        # // FILE: nume_fisier.ext"
+        # // FILE: file_named.ext"
         file_match = re.search(r'(?:\/\/|::|#|REM)\s*FILE:\s*([a-zA-Z0-9_.]+\.[a-zA-Z0-9]+)',first_line,re.IGNORECASE)
         
         if file_match:
@@ -192,19 +174,15 @@ def extract_code(original_code: str) -> dict:
     return extracted_files
 
 
-
-# function for saving the code on disk
 def save_code(original_code: str, file_path:str) ->str:
+    # save code on disk
     with open(file_path, 'w') as file:
         file.write(original_code)
     print(f"\nSystemVerilog code saved in {file_path}\n")
 
 
 def find_file_in_project(file_name: str) -> str:
-    """
-    Searches for a file in the configured RTL/TB/run-script directories.
-    """
-
+    """Searches for a file in the configured RTL/TB/run-script directories."""
     bat_dir = os.path.dirname(PROJECT_CONFIG.get("bat_file_path", ""))
 
     search_dirs = [
@@ -223,10 +201,9 @@ def find_file_in_project(file_name: str) -> str:
 
     return ""
 
+
 def read_source_context(file_path: str, line_no: int, radius: int = 4) -> str:
-    """
-    Reads a small source-code window around the error line.
-    """
+    """Reads a small source-code window around the error line."""
 
     if not file_path or not os.path.exists(file_path):
         return ""
@@ -241,7 +218,6 @@ def read_source_context(file_path: str, line_no: int, radius: int = 4) -> str:
     end = min(len(lines), line_no + radius)
 
     context_lines = []
-
     for idx in range(start, end + 1):
         marker = ">>" if idx == line_no else "  "
         code_line = lines[idx - 1].rstrip()
@@ -249,12 +225,11 @@ def read_source_context(file_path: str, line_no: int, radius: int = 4) -> str:
 
     return "\n".join(context_lines)
 
+
 def build_source_error_context(error_text: str) -> tuple[str, str]:
     """
     Builds source-code context for the files and lines mentioned in Vivado errors.
-    Returns:
-    - markdown/code text for UI
-    - comma-separated target files
+    Returns: markdown/code text for UI and separated target files
     """
 
     locations = extract_error_file_locations(error_text)
@@ -269,13 +244,12 @@ def build_source_error_context(error_text: str) -> tuple[str, str]:
         file_name = loc["file_name"]
         line_no = loc["line"]
 
-        # ignorăm top.sv dacă apare doar ca "ignored due to previous errors"
+        # ignore top.sv if the error is "ignored due to previous errors"
         if file_name == "top.sv" and "ignored due to previous errors" in error_text.lower():
             continue
 
         file_path = find_file_in_project(file_name)
         source_context = read_source_context(file_path, line_no)
-
         target_files.append(file_name)
 
         if source_context:
@@ -296,13 +270,9 @@ def build_source_error_context(error_text: str) -> tuple[str, str]:
 def extract_error_file_locations(error_text: str) -> list[dict]:
     """
     Extracts file and line references from Vivado/XSim errors.
-
-    Example:
-    ERROR: [VRFC 10-4982] syntax error near 'start_item' [..\\TB-FIFO/sequence.sv:35]
     """
-
     locations = []
-
+    
     pattern = re.compile(
         r"\[([^\[\]]+\.(?:sv|v|svh|vh|bat)):(\d+)\]",
         re.IGNORECASE,
