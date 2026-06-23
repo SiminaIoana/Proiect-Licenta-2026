@@ -15,6 +15,7 @@ class sequencer extends uvm_sequencer#(transaction);
    task run_phase(uvm_phase phase);
       `uvm_info("SEQUENCER-RUN PHASE","",UVM_NONE);
    endtask
+
 endclass
 
 `endif

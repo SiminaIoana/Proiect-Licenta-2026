@@ -1,144 +1,194 @@
-`ifndef FIFO_MONITOR_UVM
-`define FIFO_MONITOR_UVM
+`ifndef FIFO_INPUT_MONITOR_UVM
+`define FIFO_INPUT_MONITOR_UVM
+
 `include "include.sv"
 
-`define vintf_h vif.monitor_cb
-class monitor extends uvm_monitor;
-   `uvm_component_utils(monitor)
+`define cmd_mon_vintf vif.monitor_cb
 
-   virtual fifo_intf.monitor_mp vif;
-   transaction trans;
+class input_monitor extends uvm_monitor;
+   `uvm_component_utils(input_monitor)
 
-   uvm_analysis_port#(transaction) mon2scor;
-   int unsigned clk_cycle_count      = 0;
-   int unsigned cnt_normal_write     = 0;       // normal write packet
-   int unsigned cnt_normal_read      = 0;       // normal read packet
-   int unsigned cnt_simultaneous_rw  = 0;       // we and re simultan
-   int unsigned cnt_write_while_full = 0;       // write while fifo is full  
-   int unsigned cnt_read_while_empty = 0;       // read while fifo is empty
-   int unsigned cnt_no_op            = 0;       // no operation => no read and no write
+   virtual fifo_cmd_intf vif;
 
-   function new(string name="monitor",uvm_component parent=null);
-      super.new(name,parent);
+   uvm_analysis_port#(transaction) cmd_ap;
+
+   int unsigned clk_cycle_count = 0;
+   int unsigned cmd_packet_count = 0;
+
+   int unsigned cnt_write_q0 = 0;
+   int unsigned cnt_write_q1 = 0;
+   int unsigned cnt_read_q0  = 0;
+   int unsigned cnt_read_q1  = 0;
+   int unsigned cnt_flush_q0 = 0;
+   int unsigned cnt_flush_q1 = 0;
+   int unsigned cnt_simultaneous_rw = 0;
+   int unsigned cnt_no_op = 0;
+
+   function new(string name = "input_monitor", uvm_component parent = null);
+      super.new(name, parent);
    endfunction
 
    function void build_phase(uvm_phase phase);
       super.build_phase(phase);
-      mon2scor=new("mon2scor",this);
-       if(!uvm_config_db#(virtual fifo_intf)::get(this,"","vintf",vif)) begin
-         `uvm_fatal("MONITOR_CONNECTION_NOT_ESTABLISHED","");
+
+      cmd_ap = new("cmd_ap", this);
+
+      if (!uvm_config_db#(virtual fifo_cmd_intf)::get(this, "", "cmd_vintf", vif)) begin
+         `uvm_fatal("INPUT_MONITOR_CONNECTION_NOT_ESTABLISHED", "")
       end
       else begin
-         `uvm_info("MONITOR_CONNECTION_ESTABLISHED","",UVM_NONE);
+         `uvm_info("INPUT_MONITOR_CONNECTION_ESTABLISHED", "", UVM_NONE)
       end
 
-      `uvm_info("MON_CSV_HEADER","PKT_ID,CLK_CYCLE,WE,RE,DATA_IN,DATA_OUT,FULL,EMPTY,STATE",UVM_NONE)
+      `uvm_info("CMD_MON_CSV_HEADER",
+         "PKT_ID,TIME,CLK_CYCLE,Q_ADDR,WR_EN,RD_EN,FLUSH,DATA_IN,CMD_STATE",
+         UVM_NONE)
    endfunction
 
-   function fifo_state_e classify_transaction(transaction t);
-        if (t.we == 1 && t.re == 1)
-            return SIMULTANEOUS_RW;
-        else if (t.we == 1 && t.full == 1)
-            return WRITE_WHILE_FULL;
-        else if (t.re == 1 && t.empty == 1)
-            return READ_WHILE_EMPTY;
-        else if (t.we == 1 && t.re == 0 && t.full == 0)
-            return NORMAL_WRITE;
-        else if (t.we == 0 && t.re == 1 && t.empty == 0)
-            return NORMAL_READ;
-        else
-            return NO_OPERATION;
+
+   function void update_stats(transaction t);
+      if (t.flush == 1) begin
+         if (t.q_addr == 0)
+            cnt_flush_q0++;
+         else
+            cnt_flush_q1++;
+      end
+      else if (t.wr_en == 1 && t.rd_en == 1) begin
+         cnt_simultaneous_rw++;
+      end
+      else if (t.wr_en == 1) begin
+         if (t.q_addr == 0)
+            cnt_write_q0++;
+         else
+            cnt_write_q1++;
+      end
+      else if (t.rd_en == 1) begin
+         if (t.q_addr == 0)
+            cnt_read_q0++;
+         else
+            cnt_read_q1++;
+      end
+      else begin
+         cnt_no_op++;
+      end
    endfunction
 
-   function void update_stats(fifo_state_e state);
-        case (state)
-            NORMAL_WRITE:     cnt_normal_write++;
-            NORMAL_READ:      cnt_normal_read++;
-            SIMULTANEOUS_RW:  cnt_simultaneous_rw++;
-            WRITE_WHILE_FULL: cnt_write_while_full++;
-            READ_WHILE_EMPTY: cnt_read_while_empty++;
-            NO_OPERATION:     cnt_no_op++;
-            default: ; 
-        endcase
+
+   function void log_command(transaction t);
+      `uvm_info("CMD_MON_CSV_DATA", t.to_csv_row($time), UVM_NONE)
+
+      case (t.fifo_state_tag)
+
+         NORMAL_WRITE: begin
+            `uvm_info("CMD_MON_EVENT",
+               $sformatf("[PKT#%0d] WRITE command | q_addr=%0d | data_in=0x%08h",
+               t.packet_id, t.q_addr, t.data_in),
+               UVM_NONE)
+         end
+
+         NORMAL_READ: begin
+            `uvm_info("CMD_MON_EVENT",
+               $sformatf("[PKT#%0d] READ command | q_addr=%0d",
+               t.packet_id, t.q_addr),
+               UVM_NONE)
+         end
+
+         SIMULTANEOUS_RW: begin
+            `uvm_info("CMD_MON_SPECIAL_EVENT",
+               $sformatf("[PKT#%0d] SIMULTANEOUS_RW command | q_addr=%0d | data_in=0x%08h",
+               t.packet_id, t.q_addr, t.data_in),
+               UVM_NONE)
+         end
+
+         FLUSH_OP: begin
+            `uvm_info("CMD_MON_SPECIAL_EVENT",
+               $sformatf("[PKT#%0d] FLUSH command | q_addr=%0d",
+               t.packet_id, t.q_addr),
+               UVM_NONE)
+         end
+
+         NO_OPERATION: begin
+            `uvm_info("CMD_MON_EVENT",
+               $sformatf("[PKT#%0d] NO_OPERATION", t.packet_id),
+               UVM_HIGH)
+         end
+
+         default: ;
+      endcase
    endfunction
 
-function void log_transaction(transaction t);
-   string csv_line;
-   csv_line = t.to_csv_row($time);
 
-   `uvm_info("MON_CSV_DATA", csv_line, UVM_NONE)
+   task run_phase(uvm_phase phase);
+      transaction trans;
 
-   case (t.fifo_state_tag)
-      WRITE_WHILE_FULL: begin
-         `uvm_info("MONITOR_SPECIAL_EVENT",
-                    $sformatf("[PKT#%0d] WRITE_WHILE_FULL detected at t=%0t | we=%0b full=%0b | data_in=0x%08h -- write was blocked",
-                    t.packet_id, $time, t.we, t.full, t.data_in), UVM_NONE)
+      forever begin
+         @(vif.monitor_cb);
+         clk_cycle_count++;
+
+         if (vif.reset == 1) begin
+            trans = transaction::type_id::create("trans", this);
+
+            trans.packet_id = cmd_packet_count;
+            cmd_packet_count++;
+
+            trans.cycle_count = clk_cycle_count;
+
+            trans.wr_en   = `cmd_mon_vintf.wr_en;
+            trans.rd_en   = `cmd_mon_vintf.rd_en;
+            trans.flush   = `cmd_mon_vintf.flush;
+            trans.q_addr  = `cmd_mon_vintf.q_addr;
+            trans.data_in = `cmd_mon_vintf.data_in;
+
+            trans.update_cmd_state();
+
+            update_stats(trans);
+            log_command(trans);
+
+            cmd_ap.write(trans);
+         end
       end
-      READ_WHILE_EMPTY: begin
-         `uvm_info("MON_SPECIAL_EVENT",
-                    $sformatf("[PKT#%0d] READ_WHILE_EMPTY detected at t=%0t | re=%0b empty=%0b -- read was blocked ",
-                    t.packet_id, $time, t.re, t.empty),UVM_NONE)
-      end
-      SIMULTANEOUS_RW: begin
-         `uvm_info("MON_SPECIAL_EVENT",
-                    $sformatf("[PKT#%0d] SIMULTANEOUS_RW detected at t=%0t | we=%0b re=%0b full=%0b empty=%0b | data_in=0x%08h data_out=0x%08h",
-                    t.packet_id, $time, t.we, t.re, t.full, t.empty, t.data_in, t.data_out), UVM_NONE)
-      end
-      default: ;
-   endcase
-endfunction
+   endtask
 
-task run_phase(uvm_phase phase);
-   forever begin
-      @(vif.monitor_cb);
-      clk_cycle_count++;
 
-      if(vif.reset == 1) begin
-         trans = transaction::type_id::create("trans", this);
-         
-         trans.we       = `vintf_h.we;
-         trans.re       = `vintf_h.re;
-         trans.data_in  = `vintf_h.data_in;
-         trans.data_out = `vintf_h.data_out; 
-         trans.full     = `vintf_h.full;
-         trans.empty    = `vintf_h.empty;
+   function void report_phase(uvm_phase phase);
+      int unsigned total_cmds;
 
-         trans.fifo_state_tag = classify_transaction(trans);
-         update_stats(trans.fifo_state_tag);
-         log_transaction(trans);
-         mon2scor.write(trans);
-      end
-   end
-endtask
+      total_cmds = cnt_write_q0 + cnt_write_q1 +
+                   cnt_read_q0  + cnt_read_q1  +
+                   cnt_flush_q0 + cnt_flush_q1 +
+                   cnt_simultaneous_rw + cnt_no_op;
 
-function void report_phase(uvm_phase phase);
-   
-   int unsigned total_transactions;
-   total_transactions = cnt_normal_write + cnt_normal_read + cnt_simultaneous_rw + cnt_write_while_full + cnt_read_while_empty + cnt_no_op;
+      `uvm_info("CMD_MON_SUMMARY", "================================================", UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", "          INPUT MONITOR COMMAND SUMMARY          ", UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", "================================================", UVM_NONE)
 
-   `uvm_info("MON_SUMMARY", "================================================", UVM_NONE)
-   `uvm_info("MON_SUMMARY", "       SUMMARY STATISTIC MONITOR FIFO           ", UVM_NONE)
-   `uvm_info("MON_SUMMARY", "================================================", UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("Total observed commands : %0d", total_cmds), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("Clock cycles observed   : %0d", clk_cycle_count), UVM_NONE)
 
-   `uvm_info("MON_SUMMARY", $sformatf("Total observed transaction : %0d", total_transactions),UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("Clock cycle: %0d", clk_cycle_count), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", "------------------------------------------------", UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("WRITE Q0          : %0d", cnt_write_q0), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("WRITE Q1          : %0d", cnt_write_q1), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("READ Q0           : %0d", cnt_read_q0), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("READ Q1           : %0d", cnt_read_q1), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("FLUSH Q0          : %0d", cnt_flush_q0), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("FLUSH Q1          : %0d", cnt_flush_q1), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("SIMULTANEOUS_RW   : %0d", cnt_simultaneous_rw), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", $sformatf("NO_OPERATION      : %0d", cnt_no_op), UVM_NONE)
+      `uvm_info("CMD_MON_SUMMARY", "================================================", UVM_NONE)
 
-   `uvm_info("MON_SUMMARY", "------------------------------------------------", UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("NORMAL_WRITE      (we=1,re=0,full=0)  : %0d", cnt_normal_write), UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("NORMAL_READ       (we=0,re=1,empty=0) : %0d", cnt_normal_read), UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("SIMULTANEOUS_RW   (we=1,re=1)         : %0d", cnt_simultaneous_rw), UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("WRITE_WHILE_FULL  (we=1,full=1)       : %0d", cnt_write_while_full), UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("READ_WHILE_EMPTY  (re=1,empty=1)      : %0d", cnt_read_while_empty), UVM_NONE)
-   `uvm_info("MON_SUMMARY", $sformatf("NO_OPERATION      (we=0,re=0)         : %0d", cnt_no_op), UVM_NONE)
-   `uvm_info("MON_SUMMARY", "================================================", UVM_NONE)
- 
-   if (cnt_write_while_full == 0)
-      `uvm_warning("MON_COVERAGE_RISK", "WRITE_WHILE_FULL did not appear in the simualtion! Bins for writing while FIFO is full should be uncovered")
-   if (cnt_read_while_empty == 0)
-      `uvm_warning("MON_COVERAGE_RISK", "READ_WHILE_EMPTY did not appear in the simualtion! Bins for reading while FIFO is empty should be uncovered")
-   if (cnt_simultaneous_rw == 0)
-      `uvm_warning("MON_COVERAGE_RISK", "SIMULTANEOUS_RW did not appear in the simualtion! Cross for we and re active should be uncovered")
-endfunction
+      if (cnt_write_q1 == 0)
+         `uvm_warning("CMD_COVERAGE_RISK", "No WRITE command was observed on queue 1.")
+
+      if (cnt_read_q1 == 0)
+         `uvm_warning("CMD_COVERAGE_RISK", "No READ command was observed on queue 1.")
+
+      if (cnt_flush_q0 == 0 || cnt_flush_q1 == 0)
+         `uvm_warning("CMD_COVERAGE_RISK", "Flush was not observed on both queues.")
+
+      if (cnt_simultaneous_rw == 0)
+         `uvm_warning("CMD_COVERAGE_RISK", "SIMULTANEOUS_RW command did not appear in simulation.")
+   endfunction
+
 endclass
 
 `endif

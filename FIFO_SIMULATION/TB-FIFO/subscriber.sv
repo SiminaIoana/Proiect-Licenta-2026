@@ -2,11 +2,11 @@
 `define FIFO_SUBSCRIBER_UVM
 
 `include "include.sv"
-
 class subscriber extends uvm_subscriber#(transaction);
    `uvm_component_utils(subscriber)
 
    uvm_tlm_analysis_fifo#(transaction) mon2subs;
+
    transaction trans;
    
    function new(string name="environment",uvm_component parent=null);
@@ -19,52 +19,60 @@ class subscriber extends uvm_subscriber#(transaction);
       mon2subs=new("mon2subs",this);
    endfunction
 
+   
    covergroup fifo_cg();
       we_cp: coverpoint trans.we {
-         bins active   = {1};
-         bins inactive = {0};
-      }
+        bins active   = {1};
+        bins inactive = {0};
+    }
 
-      re_cp: coverpoint trans.re {
-         bins active   = {1};
-         bins inactive = {0};
-      }
+    re_cp: coverpoint trans.re {
+        bins active   = {1};
+        bins inactive = {0};
+    }
 
-      full_cp: coverpoint trans.full {
-         bins is_full  = {1};
-         bins not_full = {0};
-      }
+    full_cp: coverpoint trans.full {
+        bins is_full  = {1};
+        bins not_full = {0};
+    }
 
-      empty_cp: coverpoint trans.empty {
-         bins is_empty  = {1};
-         bins not_empty = {0};
-      }
+    empty_cp: coverpoint trans.empty {
+        bins is_empty  = {1};
+        bins not_empty = {0};
+    }
 
-      cp_data: coverpoint trans.data_in {
-         bins low   = {[0:2]};
-         bins mid1  = {[3:5]};
-         bins mid2  = {[6:8]};
-         bins mid3  = {[9:11]};
-         bins mid4  = {[12:14]};
-         bins mid5  = {[15:17]};
-         bins mid6  = {[18:20]};
-         bins mid7  = {[21:23]};
-         bins high  = {[24:30]};
-         bins corners = {32'h0, 32'hFFFF_FFFF, 32'hAAAA_AAAA, 32'h5555_5555};
-      }
-      write_protocol_cross: cross we_cp, full_cp {
-         bins write_ok   = binsof(we_cp.active) && binsof(full_cp.not_full);
-         bins write_full = binsof(we_cp.active) && binsof(full_cp.is_full); // Corner case: overflow
-         ignore_bins no_write = binsof(we_cp.inactive);
-      }
-
-      read_protocol_cross: cross re_cp, empty_cp {
-         bins read_ok    = binsof(re_cp.active) && binsof(empty_cp.not_empty);
-         bins read_empty = binsof(re_cp.active) && binsof(empty_cp.is_empty); // Corner case: underflow
+    cp_data: coverpoint trans.data_in {
+    bins low   = {[0:2]};
+    bins mid1  = {[3:5]};
+    bins mid2  = {[6:8]};
+    bins mid3  = {[9:11]};
+    bins mid4  = {[12:14]};
+    bins mid5  = {[15:17]};
+    bins mid6  = {[18:20]};
+    bins mid7  = {[21:23]};
+    bins high  = {[24:30]};
+    bins corners = {32'h0, 32'hFFFF_FFFF, 32'hAAAA_AAAA, 32'h5555_5555};
+}
+   write_protocol_cross: cross we_cp, full_cp {
+        // Write is active AND FIFO is not full
+        bins write_ok   = binsof(we_cp.active) && binsof(full_cp.not_full);
+        bins write_full = binsof(we_cp.active) && binsof(full_cp.is_full); // Corner case: overflow
         
-         ignore_bins no_read = binsof(re_cp.inactive);
-      }
+        ignore_bins no_write = binsof(we_cp.inactive);
+    }
+
+    read_protocol_cross: cross re_cp, empty_cp {
+        bins read_ok    = binsof(re_cp.active) && binsof(empty_cp.not_empty);
+        bins read_empty = binsof(re_cp.active) && binsof(empty_cp.is_empty); // Corner case: underflow
+        
+        ignore_bins no_read = binsof(re_cp.inactive);
+    }
+    impossible_state_cross: cross full_cp, empty_cp {
+        ignore_bins impossible = binsof(full_cp.is_full) && binsof(empty_cp.is_empty);
+    }
+
    endgroup
+
 
    function void write(transaction t);
       mon2subs.write(t); 
@@ -83,6 +91,7 @@ class subscriber extends uvm_subscriber#(transaction);
       `uvm_info("MY_COVERAGE",$sformatf("%0f",fifo_cg.get_coverage()),UVM_NONE);
       $display("----------------------------------------------------------------");
    endfunction
+
 endclass
 
 `endif
