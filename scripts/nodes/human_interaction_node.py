@@ -9,7 +9,8 @@ from utils_files.intent_parser import normalize_user_input
 from utils_files.injection import create_rollback_checkpoint, inject_generated_code
 from prompts.human_interaction_feedback import (
     HUMAN_INTERACTION_SYSTEM_PROMPT,
-    HUMAN_REVIEW_ROUTER_PROMPT
+    HUMAN_REVIEW_ROUTER_PROMPT,
+    HUMAN_CONTEXTUAL_ANSWER_PROMPT
 )
 
 def normalize_text(text: str) -> str:
@@ -1098,44 +1099,16 @@ def generate_contextual_answer(raw_text: str, phase: Phase, state: AgentState) -
     try:
         llm = Settings.llm
 
-        prompt = f"""
-You are VerifCopilot, a helpful assistant for a UVM functional coverage closure system.
-
-Answer the user's question using the current workflow context.
-
-Rules:
-- Be clear, direct, and natural.
-- Do not refer to the user in third person.
-- Do not say "the user suggests", "the user wants", or "the user asks".
-- Do not change the action plan.
-- Do not generate code unless the user explicitly asks for code.
-- Do not claim that a step has already been executed.
-- Keep the answer practical and related to UVM, coverage, or the current workflow.
-
-Current phase:
-{phase}
-
-Current selected coverage hole:
-{state.get("current_hole", {}).get("description", "")}
-
-Available coverage holes:
-{state.get("holes_list", [])}
-
-Current action plan:
-{state.get("action_plan", "")[:4000]}
-
-Last analysis or result:
-{state.get("root_cause_hole", "")[:4000]}
-
-Generated code, if available:
-{state.get("generated_code", "")[:3000]}
-
-User question:
-{raw_text}
-
-End your answer with this exact follow-up question:
-{get_contextual_follow_up(phase)}
-"""
+        prompt = HUMAN_CONTEXTUAL_ANSWER_PROMPT.format(
+            phase=phase,
+            current_hole=state.get("current_hole", {}).get("description", ""),
+            holes_list=state.get("holes_list", []),
+            action_plan=state.get("action_plan", "")[:4000],
+            last_result=state.get("root_cause_hole", "")[:4000],
+            generated_code=state.get("generated_code", "")[:3000],
+            raw_text=raw_text,
+            follow_up=get_contextual_follow_up(phase),
+        )
 
         response = llm.complete(prompt)
         return response.text.strip()
