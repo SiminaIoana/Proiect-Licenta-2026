@@ -318,7 +318,9 @@ Decision rules:
   Diagnose why the existing test fails or why coverage is not saved.
   Prefer MODIFY_EXISTING_SEQUENCE, MODIFY_EXISTING_TEST, TESTBENCH_WIRING_FIX, or NO_CHANGE_EXPLAIN depending on evidence.
 
-A failed existing test is not by itself evidence that a new sequence should be created.
+Do not use the word "failed" for a test unless the Checker status is FAILED or the log contains UVM_ERROR > 0, UVM_FATAL > 0, Vivado ERROR, syntax error, compilation failed, or elaboration failed.
+A coverage hole is not a failed test. If a test did not hit a bin, say "did not cover" or "did not exercise".
+MakeSVfile.bat ERRORLEVEL guards are conditional checks, not evidence that the command failed.
 A missing run command is not evidence that stimulus is missing.
 
 ============================================================
@@ -464,6 +466,12 @@ REFINEMENT RULES
 15. If the user asks for more explanation, technical reasoning, or justification, do not describe it as a future planned change. Add or update TECHNICAL_JUSTIFICATION directly in the current plan.
 16. TECHNICAL_JUSTIFICATION must explain why the fix is valid from a UVM/SystemVerilog verification perspective, including the relevant DUT condition, coverage sampling behavior, selected strategy, and implementation rules for the Generator.
 If the strategy changes, explain why. If the strategy remains the same, explain how the plan was corrected.
+
+======================= Filed analysis==================
+Do not use the word "failed" for a test unless the Checker status is FAILED or the log contains UVM_ERROR > 0, UVM_FATAL > 0, Vivado ERROR, syntax error, compilation failed, or elaboration failed.
+A coverage hole is not a failed test. If a test did not hit a bin, say "did not cover" or "did not exercise".
+MakeSVfile.bat ERRORLEVEL guards are conditional checks, not evidence that the command failed.
+
 
 ============================================================
 REQUIRED OUTPUT FORMAT

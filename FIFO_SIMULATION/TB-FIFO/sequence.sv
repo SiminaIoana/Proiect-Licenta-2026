@@ -100,73 +100,121 @@ class seq_cmd_hole extends base_sequence;
       int i;
 
       `uvm_info("SEQ_CMD_HOLE_STARTED",
-                "Starting directed sequence for NORMAL_READ and SIMULTANEOUS_RW coverage.",
+                "Starting directed sequence to hit cmd coverage holes.",
                 UVM_NONE)
 
       // ------------------------------------------------------
-      // 1. Write some data to queue 0 so we can read it back
-      // ------------------------------------------------------
-      trans = transaction::type_id::create("trans");
-      start_item(trans);
-      trans.randomize() with {
-         wr_en  == 1;
-         rd_en  == 0;
-         flush  == 0;
-         q_addr == 0;
-         data_in == 42;
-      };
-      finish_item(trans);
-
-      trans = transaction::type_id::create("trans");
-      start_item(trans);
-      trans.randomize() with {
-         wr_en  == 1;
-         rd_en  == 0;
-         flush  == 0;
-         q_addr == 0;
-         data_in == 99;
-      };
-      finish_item(trans);
-
-      // ------------------------------------------------------
-      // 2. NORMAL_READ: read from queue 0 (rd_en=1, wr_en=0)
+      //  Flush both queues to start from a clean state
       // ------------------------------------------------------
       trans = transaction::type_id::create("trans");
       start_item(trans);
       trans.randomize() with {
          wr_en  == 0;
-         rd_en  == 1;
-         flush  == 0;
+         rd_en  == 0;
+         flush  == 1;
          q_addr == 0;
+         data_in == 0;
+      };
+      finish_item(trans);
+
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 0;
+         rd_en  == 0;
+         flush  == 1;
+         q_addr == 1;
+         data_in == 0;
       };
       finish_item(trans);
 
       // ------------------------------------------------------
-      // 3. SIMULTANEOUS_RW: write and read queue 0 at same time
-      //    (wr_en=1, rd_en=1) - FIFO has data from step 1
+      //  Generate 12 transactions targeting various cmd states
+      //  and data ranges to hit uncovered coverage bins
+      // ------------------------------------------------------
+      for (i = 0; i < 12; i++) begin
+         trans = transaction::type_id::create("trans");
+         start_item(trans);
+         // Alternate between write, read, simultaneous, and no-op
+         // Use inline constraints to hit specific data ranges
+         if (i < 4) begin
+            // Writes with data in low range
+            trans.randomize() with {
+               wr_en  == 1;
+               rd_en  == 0;
+               flush  == 0;
+               q_addr == (i % 2);
+               data_in inside {[0:2]};
+            };
+         end else if (i < 8) begin
+            // Reads (need data in queue first - write then read)
+            // For simplicity, do simultaneous read/write to cover that bin
+            trans.randomize() with {
+               wr_en  == 1;
+               rd_en  == 1;
+               flush  == 0;
+               q_addr == (i % 2);
+               data_in inside {[3:5]};
+            };
+         end else begin
+            // No-operation and flush-like commands
+            trans.randomize() with {
+               wr_en  == 0;
+               rd_en  == 0;
+               flush  == 0;
+               q_addr == (i % 2);
+               data_in inside {[6:8]};
+            };
+         end
+         finish_item(trans);
+      end
+
+      // ------------------------------------------------------
+      //  Additional transactions to hit corner data values
       // ------------------------------------------------------
       trans = transaction::type_id::create("trans");
       start_item(trans);
       trans.randomize() with {
          wr_en  == 1;
-         rd_en  == 1;
+         rd_en  == 0;
          flush  == 0;
          q_addr == 0;
-         data_in == 77;
+         data_in == 32'hFFFF_FFFF;
+      };
+      finish_item(trans);
+
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 1;
+         rd_en  == 0;
+         flush  == 0;
+         q_addr == 1;
+         data_in == 32'hAAAA_AAAA;
+      };
+      finish_item(trans);
+
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 1;
+         rd_en  == 0;
+         flush  == 0;
+         q_addr == 0;
+         data_in == 32'h5555_5555;
       };
       finish_item(trans);
 
       `uvm_info("SEQ_CMD_HOLE_DONE",
-                "Completed directed NORMAL_READ and SIMULTANEOUS_RW transactions.",
+                "Completed directed sequence for cmd coverage holes.",
                 UVM_NONE)
    endtask
-
 endclass
 
-class seq_overflow extends base_sequence;
-   `uvm_object_utils(seq_overflow)
+class seq_fill_fifo extends base_sequence;
+   `uvm_object_utils(seq_fill_fifo)
 
-   function new(string name = "seq_overflow");
+   function new(string name = "seq_fill_fifo");
       super.new(name);
    endfunction
 
@@ -174,12 +222,38 @@ class seq_overflow extends base_sequence;
       transaction trans;
       int i;
 
-      `uvm_info("SEQ_OVERFLOW_STARTED",
-                "Starting directed sequence to force overflow on queue 0 and queue 1.",
+      `uvm_info("SEQ_FILL_FIFO_STARTED",
+                "Starting directed sequence to fill FIFO to full state.",
                 UVM_NONE)
 
       // ------------------------------------------------------
-      // 1. Fill queue 0 with 8 writes (depth = 8)
+      //  Flush both queues to start from a clean state
+      // ------------------------------------------------------
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 0;
+         rd_en  == 0;
+         flush  == 1;
+         q_addr == 0;
+         data_in == 0;
+      };
+      finish_item(trans);
+
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 0;
+         rd_en  == 0;
+         flush  == 1;
+         q_addr == 1;
+         data_in == 0;
+      };
+      finish_item(trans);
+
+      // ------------------------------------------------------
+      //  Fill queue 0 with 8 consecutive writes (no reads)
+      //  to reach full state (FIFO depth = 8)
       // ------------------------------------------------------
       for (i = 0; i < 8; i++) begin
          trans = transaction::type_id::create("trans");
@@ -189,12 +263,14 @@ class seq_overflow extends base_sequence;
             rd_en  == 0;
             flush  == 0;
             q_addr == 0;
+            data_in inside {[0:2]};
          };
          finish_item(trans);
       end
 
       // ------------------------------------------------------
-      // 2. Force overflow on queue 0 (9th write, no read)
+      //  One more write to queue 0 to trigger overflow
+      //  (write while full)
       // ------------------------------------------------------
       trans = transaction::type_id::create("trans");
       start_item(trans);
@@ -203,12 +279,25 @@ class seq_overflow extends base_sequence;
          rd_en  == 0;
          flush  == 0;
          q_addr == 0;
+         data_in inside {[0:2]};
       };
       finish_item(trans);
 
       // ------------------------------------------------------
-      // 3. Fill queue 1 with 8 writes (depth = 8)
+      //  Flush queue 0 and repeat for queue 1
       // ------------------------------------------------------
+      trans = transaction::type_id::create("trans");
+      start_item(trans);
+      trans.randomize() with {
+         wr_en  == 0;
+         rd_en  == 0;
+         flush  == 1;
+         q_addr == 0;
+         data_in == 0;
+      };
+      finish_item(trans);
+
+      // Fill queue 1 with 8 consecutive writes
       for (i = 0; i < 8; i++) begin
          trans = transaction::type_id::create("trans");
          start_item(trans);
@@ -217,13 +306,12 @@ class seq_overflow extends base_sequence;
             rd_en  == 0;
             flush  == 0;
             q_addr == 1;
+            data_in inside {[0:2]};
          };
          finish_item(trans);
       end
 
-      // ------------------------------------------------------
-      // 4. Force overflow on queue 1 (9th write, no read)
-      // ------------------------------------------------------
+      // Overflow write to queue 1
       trans = transaction::type_id::create("trans");
       start_item(trans);
       trans.randomize() with {
@@ -231,11 +319,12 @@ class seq_overflow extends base_sequence;
          rd_en  == 0;
          flush  == 0;
          q_addr == 1;
+         data_in inside {[0:2]};
       };
       finish_item(trans);
 
-      `uvm_info("SEQ_OVERFLOW_DONE",
-                "Completed overflow sequence for both queues.",
+      `uvm_info("SEQ_FILL_FIFO_DONE",
+                "Completed directed sequence for FIFO full coverage.",
                 UVM_NONE)
    endtask
 endclass

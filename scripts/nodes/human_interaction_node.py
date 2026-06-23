@@ -298,6 +298,24 @@ def human_interaction_node(state: AgentState):
         result["user_feedback"] = ""
         return result
 
+    if phase in [
+        Phase.PLAN_REVIEW,
+        Phase.CODE_REVIEW,
+        Phase.RESULT_REVIEW,
+        Phase.SELECT_HOLE,
+    ]:
+        if is_explanation_only_question(raw_text):
+            result["ui_message"] = generate_contextual_answer(raw_text, phase, state)
+            result["user_command"] = ""
+            result["user_feedback"] = ""
+            return result
+
+        if is_question_like(raw_text) and not is_change_request_like(raw_text):
+            result["ui_message"] = generate_contextual_answer(raw_text, phase, state)
+            result["user_command"] = ""
+            result["user_feedback"] = ""
+            return result
+        
     # Error review after the plan failed
     if phase == Phase.PLAN_REVIEW and status == Status.FAILED and errors:
         auto_fix_allowed = state.get("auto_fix_allowed", True)
@@ -974,3 +992,221 @@ def human_interaction_node(state: AgentState):
         )
 
         return result
+    
+
+def is_question_like(text: str) -> bool:
+    """
+    Detects when the user is asking for an explanation or clarification.
+    """
+    return contains_any(
+        text,
+        [
+            "?",
+            "why",
+            "how",
+            "what",
+            "what does",
+            "what means",
+            "explain",
+            "clarify",
+            "meaning",
+            "i don't understand",
+            "i do not understand",
+            "can you explain",
+            "could you explain",
+            "tell me why",
+            "tell me how",
+            "can you tell me",
+            "can you check",
+            "is it",
+            "is this",
+            "is the code",
+            "is this code",
+            "are there",
+            "does it",
+            "do you see",
+            "syntax",
+            "syntactic",
+            "syntactically",
+            "bug",
+            "bugs",
+        ]
+    )
+
+def is_change_request_like(text: str) -> bool:
+    """
+    Detects when the user is not only asking, but also requesting a change.
+    """
+    return contains_any(
+        text,
+        [
+            "change",
+            "modify",
+            "revise",
+            "regenerate",
+            "try to",
+            "use instead",
+            "instead",
+            "do not",
+            "don't",
+            "dont",
+            "avoid",
+            "add",
+            "remove",
+            "fix",
+            "not good",
+            "wrong",
+            "this is incorrect",
+            "this is not correct",
+            "you should",
+            "i think you should",
+            "should not",
+            "must",
+            "must not",
+            "needs to",
+            "need to",
+            "it should",
+            "it must",
+            "better to",
+            "would be better",
+            "make it",
+            "generate a new",
+        ]
+    )
+
+
+def get_contextual_follow_up(phase: Phase) -> str:
+    if phase == Phase.PLAN_REVIEW:
+        return "Would you like me to apply the proposed plan, or do you have another question?"
+
+    if phase == Phase.CODE_REVIEW:
+        return "Would you like me to apply and run this code, or should I revise it first?"
+
+    if phase == Phase.RESULT_REVIEW:
+        return "Would you like to continue with another coverage hole, refine the current plan, or rollback?"
+
+    if phase == Phase.SELECT_HOLE:
+        return "Which coverage hole would you like to analyze next?"
+
+    return "Would you like to continue, or do you have another question?"
+
+
+def generate_contextual_answer(raw_text: str, phase: Phase, state: AgentState) -> str:
+    """
+    Generates a natural answer to a user question without changing the workflow.
+    """
+    try:
+        llm = Settings.llm
+
+        prompt = f"""
+You are VerifCopilot, a helpful assistant for a UVM functional coverage closure system.
+
+Answer the user's question using the current workflow context.
+
+Rules:
+- Be clear, direct, and natural.
+- Do not refer to the user in third person.
+- Do not say "the user suggests", "the user wants", or "the user asks".
+- Do not change the action plan.
+- Do not generate code unless the user explicitly asks for code.
+- Do not claim that a step has already been executed.
+- Keep the answer practical and related to UVM, coverage, or the current workflow.
+
+Current phase:
+{phase}
+
+Current selected coverage hole:
+{state.get("current_hole", {}).get("description", "")}
+
+Available coverage holes:
+{state.get("holes_list", [])}
+
+Current action plan:
+{state.get("action_plan", "")[:4000]}
+
+Last analysis or result:
+{state.get("root_cause_hole", "")[:4000]}
+
+Generated code, if available:
+{state.get("generated_code", "")[:3000]}
+
+User question:
+{raw_text}
+
+End your answer with this exact follow-up question:
+{get_contextual_follow_up(phase)}
+"""
+
+        response = llm.complete(prompt)
+        return response.text.strip()
+
+    except Exception as e:
+        print(f"[HUMAN WARNING] Contextual answer generation failed: {e}")
+        return (
+            "I can explain this based on the current coverage context, but I could not "
+            "generate a detailed answer right now. "
+            + get_contextual_follow_up(phase)
+        )
+    
+
+
+def is_explanation_only_question(text: str) -> bool:
+    """
+    Detects questions that ask for explanation/comparison only.
+    These should not trigger plan refinement.
+    """
+    if not is_question_like(text):
+        return False
+
+    # If the user explicitly asks to change/refine/regenerate something,
+    # this is not explanation-only.
+    explicit_change_request = contains_any(
+        text,
+        [
+            "change the plan",
+            "modify the plan",
+            "revise the plan",
+            "update the plan",
+            "regenerate the plan",
+            "change it",
+            "modify it",
+            "revise it",
+            "update it",
+            "add an idle",
+            "add a cycle",
+            "add one idle",
+            "remove",
+            "do not use",
+            "don't use",
+            "use instead",
+            "please change",
+            "please modify",
+            "can you change",
+            "can you modify",
+            "and change",
+            "and modify",
+            "but change",
+            "but modify",
+        ]
+    )
+
+    if explicit_change_request:
+        return False
+
+    explanation_patterns = [
+        "why",
+        "why do you think",
+        "why did you choose",
+        "why is",
+        "why are",
+        "what is the reason",
+        "can you tell me why",
+        "explain why",
+        "better than",
+        "rather than",
+        "instead of",
+        "compared to",
+        "difference between",
+    ]
+
+    return contains_any(text, explanation_patterns)

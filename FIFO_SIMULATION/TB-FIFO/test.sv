@@ -70,10 +70,10 @@ class test_cmd_hole extends base_test;
    endtask
 endclass
 
-class test_overflow extends base_test;
-   `uvm_component_utils(test_overflow)
+class test_fill_fifo extends base_test;
+   `uvm_component_utils(test_fill_fifo)
 
-   function new(string name = "test_overflow", uvm_component parent = null);
+   function new(string name = "test_fill_fifo", uvm_component parent = null);
       super.new(name, parent);
    endfunction
 
@@ -82,14 +82,13 @@ class test_overflow extends base_test;
    endfunction
 
    task run_phase(uvm_phase phase);
-      seq_overflow sequence_h;
+      seq_fill_fifo sequence_h;
       phase.raise_objection(this);
-      sequence_h = seq_overflow::type_id::create("sequence_h", this);
-      `uvm_info("TEST_OVERFLOW_STARTED", "Starting test_overflow", UVM_NONE);
+      sequence_h = seq_fill_fifo::type_id::create("sequence_h", this);
+      `uvm_info("TEST_FILL_FIFO_STARTED", "Starting test_fill_fifo", UVM_NONE);
       sequence_h.start(environment_h.agent_h.sequencer_h);
       phase.drop_objection(this);
    endtask
 endclass
 
 `endif
-

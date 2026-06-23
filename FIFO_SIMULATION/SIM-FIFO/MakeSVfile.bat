@@ -24,8 +24,8 @@ if %ERRORLEVEL% NEQ 0 echo [WARNING] test_case_1 failed!
 call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_cmd_hole" -cov_db_name cov_test_cmd_hole > xsim_test_cmd_hole.log 2>&1
 if %ERRORLEVEL% NEQ 0 echo [WARNING] test_cmd_hole failed!
 
-:: run test_overflow
-call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_overflow" -cov_db_name cov_test_overflow > xsim_test_overflow.log 2>&1
+:: run test_fill_fifo
+call xsim top_sim -R -testplusarg "UVM_TESTNAME=test_fill_fifo" -cov_db_name cov_test_fill_fifo > xsim_test_fill_fifo.log 2>&1
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 :: functional coverage report 
